@@ -322,6 +322,175 @@ class MorningPrediction:
 
         return trending[:5]
 
+    def get_xueqiu_hot(self) -> List[Dict]:
+        """获取雪球热帖"""
+        hot_list = []
+
+        try:
+            # 雪球热帖
+            url = "https://xueqiu.com/statuses/hot/listV2.json"
+            params = {'since_id': '-1', 'max_id': '-1', 'size': '20'}
+            headers = {
+                **self.headers,
+                'Cookie': 'xq_a_token=test;',
+                'Referer': 'https://xueqiu.com/'
+            }
+            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            data = resp.json()
+
+            if data.get('items'):
+                for item in data['items'][:20]:
+                    text = item.get('original_status', {}).get('text', '') or item.get('text', '')
+                    title = item.get('original_status', {}).get('title', '') or text[:50]
+
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in text or kw in title:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        hot_list.append({
+                            'word': title[:30],
+                            'hot_value': item.get('reply_count', 0) + item.get('retweet_count', 0),
+                            'sectors': list(set(matched_sectors)),
+                            'source': '雪球热帖',
+                        })
+        except Exception as e:
+            print(f"获取雪球热帖失败: {e}")
+
+        return hot_list[:5]
+
+    def get_guba_hot(self) -> List[Dict]:
+        """获取东财股吧热帖"""
+        hot_list = []
+
+        try:
+            # 东财股吧热门
+            url = "https://guba.eastmoney.com/interface/GetData.aspx"
+            params = {
+                'path': 'rank/hot',
+                'top': '20'
+            }
+            resp = requests.get(url, params=params, headers=self.headers, timeout=10)
+
+            # 尝试解析
+            text = resp.text
+            import re
+            # 提取标题
+            titles = re.findall(r'"Title":"([^"]+)"', text)
+
+            for title in titles[:20]:
+                matched_sectors = []
+                for sector, keywords in self.sector_keywords.items():
+                    for kw in keywords:
+                        if kw in title:
+                            matched_sectors.append(sector)
+                            break
+
+                if matched_sectors:
+                    hot_list.append({
+                        'word': title[:30],
+                        'sectors': list(set(matched_sectors)),
+                        'source': '东财股吧',
+                    })
+        except Exception as e:
+            print(f"获取东财股吧失败: {e}")
+
+        # 备用：东财人气榜
+        if not hot_list:
+            try:
+                url = "https://push2.eastmoney.com/api/qt/clist/get"
+                params = {
+                    'pn': '1', 'pz': '20', 'fs': 'm:128',
+                    'fields': 'f12,f14', 'fid': 'f3', 'po': '1'
+                }
+                resp = requests.get(url, params=params, headers=self.headers, timeout=10)
+                data = resp.json()
+
+                if data.get('data', {}).get('diff'):
+                    for item in data['data']['diff'][:10]:
+                        name = item.get('f14', '')
+                        for sector, stocks in self.sector_stocks.items():
+                            for code, stock_name in stocks:
+                                if stock_name in name:
+                                    hot_list.append({
+                                        'word': f"{name}被热议",
+                                        'sectors': [sector],
+                                        'source': '东财股吧',
+                                    })
+                                    break
+            except:
+                pass
+
+        return hot_list[:5]
+
+    def get_ths_hot(self) -> List[Dict]:
+        """获取同花顺热股/概念"""
+        hot_list = []
+
+        try:
+            # 同花顺热门概念
+            url = "https://eq.10jqka.com.cn/open/api/hot_list"
+            params = {'type': 'concept', 'list_type': 'rise'}
+            headers = {
+                **self.headers,
+                'Referer': 'https://www.10jqka.com.cn/'
+            }
+            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            data = resp.json()
+
+            if data.get('data', {}).get('list'):
+                for item in data['data']['list'][:15]:
+                    name = item.get('name', '')
+
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in name:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        hot_list.append({
+                            'word': name,
+                            'hot_value': item.get('rise', 0),
+                            'sectors': list(set(matched_sectors)),
+                            'source': '同花顺概念',
+                        })
+        except Exception as e:
+            print(f"获取同花顺热股失败: {e}")
+
+        # 备用：同花顺问财热词
+        if not hot_list:
+            try:
+                url = "https://www.iwencai.com/gateway/urp/v7/landing/getDataList"
+                resp = requests.get(url, headers=self.headers, timeout=10)
+                data = resp.json()
+
+                if data.get('data'):
+                    for item in data['data'][:10]:
+                        word = item.get('word', '')
+
+                        matched_sectors = []
+                        for sector, keywords in self.sector_keywords.items():
+                            for kw in keywords:
+                                if kw in word:
+                                    matched_sectors.append(sector)
+                                    break
+
+                        if matched_sectors:
+                            hot_list.append({
+                                'word': word,
+                                'sectors': list(set(matched_sectors)),
+                                'source': '同花顺问财',
+                            })
+            except:
+                pass
+
+        return hot_list[:5]
+
     def get_yesterday_capital_flow(self) -> List[Dict]:
         """获取昨日资金流向"""
         flows = []
@@ -410,6 +579,15 @@ class MorningPrediction:
         print("  - 获取微博热搜...")
         weibo = self.get_weibo_trending()
 
+        print("  - 获取雪球热帖...")
+        xueqiu = self.get_xueqiu_hot()
+
+        print("  - 获取东财股吧...")
+        guba = self.get_guba_hot()
+
+        print("  - 获取同花顺热股...")
+        ths = self.get_ths_hot()
+
         print("  - 获取资金流向...")
         capital_flow = self.get_yesterday_capital_flow()
 
@@ -476,6 +654,21 @@ class MorningPrediction:
                             add_score(sector, 10, f"资金流入: {name} +{inflow:.1f}亿")
                             break
 
+        # 8. 雪球热帖评分 (+20，投资社区风向)
+        for t in xueqiu:
+            for sector in t.get('sectors', []):
+                add_score(sector, 20, f"雪球热帖: {t.get('word', '')[:15]}")
+
+        # 9. 东财股吧评分 (+15，散户情绪)
+        for t in guba:
+            for sector in t.get('sectors', []):
+                add_score(sector, 15, f"东财股吧: {t.get('word', '')[:15]}")
+
+        # 10. 同花顺概念评分 (+25，专业概念热度)
+        for t in ths:
+            for sector in t.get('sectors', []):
+                add_score(sector, 25, f"同花顺: {t.get('word', '')[:15]}")
+
         # 排序
         sorted_sectors = sorted(sector_scores.items(), key=lambda x: x[1], reverse=True)
 
@@ -501,8 +694,8 @@ class MorningPrediction:
             if idx.get('change_pct', 0) < -1:
                 risks.append(f"隔夜{idx.get('name', '')}下跌{abs(idx.get('change_pct', 0)):.1f}%")
 
-        # 汇总热搜数据
-        all_trending = douyin + xiaohongshu + weibo
+        # 汇总热搜数据 (所有渠道)
+        all_trending = douyin + xiaohongshu + weibo + xueqiu + guba + ths
 
         return {
             'time': datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -539,8 +732,11 @@ class MorningPrediction:
 #### 🔥 社交媒体热搜
 
 """
-            for t in trending[:8]:
-                source_icon = {'抖音热搜': '📱', '小红书': '📕', '微博热搜': '💬'}.get(t.get('source', ''), '📰')
+            for t in trending[:10]:
+                source_icon = {
+                    '抖音热搜': '📱', '小红书': '📕', '微博热搜': '💬',
+                    '雪球热帖': '❄️', '东财股吧': '💹', '同花顺概念': '🔥', '同花顺问财': '🔍'
+                }.get(t.get('source', ''), '📰')
                 content += f"- {source_icon} **{t.get('word', '')[:20]}** ({t.get('source', '')})\n"
 
         content += """
@@ -593,7 +789,7 @@ class MorningPrediction:
         content += """
 ---
 
-*数据来源: 东财+财联社+雪球*
+*数据来源: 东财+财联社+雪球+同花顺+抖音+小红书+微博*
 """
         return content
 
