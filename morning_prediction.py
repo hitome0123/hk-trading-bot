@@ -24,19 +24,27 @@ class MorningPrediction:
         }
         self.notifier = DingTalkNotifier()
 
-        # 板块关键词映射
+        # 板块关键词映射 (扩展版)
         self.sector_keywords = {
-            'AI人工智能': ['AI', '人工智能', '大模型', 'ChatGPT', 'GPT', '英伟达', 'NVIDIA', '算力', '芯片'],
-            '商业航天': ['SpaceX', '火箭', '卫星', 'Starlink', '星链', '航天', '太空', 'Starship'],
-            '新能源汽车': ['特斯拉', 'Tesla', '电动车', 'EV', '新能源车', '比亚迪', '蔚来', '小鹏', '理想'],
-            '机器人': ['机器人', 'Optimus', '人形机器人', '波士顿动力', '自动化'],
-            '芯片半导体': ['芯片', '半导体', '光刻机', 'ASML', '台积电', '中芯', '华为'],
-            '光伏新能源': ['光伏', '太阳能', '储能', '锂电池', '宁德时代'],
-            '互联网科技': ['阿里', '腾讯', '京东', '美团', '拼多多', '互联网'],
-            '生物医药': ['医药', '疫苗', '创新药', 'FDA', '新药', '生物科技'],
-            '消费': ['消费', '茅台', '白酒', '零售', '奢侈品'],
-            '地产金融': ['地产', '房地产', '银行', '保险', '金融'],
+            'AI人工智能': ['AI', '人工智能', '大模型', 'ChatGPT', 'GPT', '英伟达', 'NVIDIA', '算力', '芯片', 'DeepSeek', '智能', '机器学习', 'AGI', '智算'],
+            '商业航天': ['SpaceX', '火箭', '卫星', 'Starlink', '星链', '航天', '太空', 'Starship', '北斗', '遥感', '低轨'],
+            '新能源汽车': ['特斯拉', 'Tesla', '电动车', 'EV', '新能源车', '比亚迪', '蔚来', '小鹏', '理想', '充电桩', '固态电池', '智能驾驶', '自动驾驶'],
+            '机器人': ['机器人', 'Optimus', '人形机器人', '波士顿动力', '自动化', '工业机器人', '服务机器人', '具身智能'],
+            '芯片半导体': ['芯片', '半导体', '光刻机', 'ASML', '台积电', '中芯', '华为', '先进制程', '国产替代', 'GPU', 'CPU'],
+            '光伏新能源': ['光伏', '太阳能', '储能', '锂电池', '宁德时代', '风电', '氢能', '绿电', '碳中和'],
+            '互联网科技': ['阿里', '腾讯', '京东', '美团', '拼多多', '互联网', '电商', '直播', '短视频'],
+            '生物医药': ['医药', '疫苗', '创新药', 'FDA', '新药', '生物科技', 'GLP-1', '减肥药', '基因'],
+            '消费': ['消费', '茅台', '白酒', '零售', '奢侈品', '免税', '旅游', '餐饮'],
+            '地产金融': ['地产', '房地产', '银行', '保险', '金融', '降息', '利率'],
+            '军工国防': ['军工', '国防', '导弹', '战斗机', '舰船', '军贸'],
+            '数据要素': ['数据', '数字经济', '数据交易', '隐私计算', '数据安全'],
         }
+
+        # 官媒来源 (权重更高)
+        self.official_sources = [
+            '工信部', '发改委', '科技部', '国务院', '央行', '证监会',
+            '财政部', '商务部', '工业和信息化部', '国资委', '新华社', '人民日报'
+        ]
 
         # 港股标的映射
         self.sector_stocks = {
@@ -144,6 +152,176 @@ class MorningPrediction:
 
         return news_list[:10]
 
+    def get_official_news(self) -> List[Dict]:
+        """获取官媒新闻 (工信部/发改委等)"""
+        news_list = []
+
+        try:
+            # 新华网财经
+            url = "http://qc.wa.news.cn/nodeart/list?nid=11147664&pgnum=1&cnt=20&tp=1&orderby=1"
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            data = resp.json()
+
+            if data.get('data', {}).get('list'):
+                for item in data['data']['list'][:15]:
+                    title = item.get('Title', '')
+                    content = item.get('Abstract', '') or title
+
+                    # 检查是否来自官媒
+                    is_official = any(src in title or src in content for src in self.official_sources)
+
+                    # 匹配板块
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in content or kw in title:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        news_list.append({
+                            'title': title[:50],
+                            'content': content[:100],
+                            'sectors': list(set(matched_sectors)),
+                            'is_official': is_official,
+                            'source': '新华网',
+                            'weight': 30 if is_official else 15,  # 官媒权重更高
+                        })
+        except Exception as e:
+            print(f"获取官媒新闻失败: {e}")
+
+        return news_list[:8]
+
+    def get_douyin_trending(self) -> List[Dict]:
+        """获取抖音热搜"""
+        trending = []
+
+        try:
+            # 抖音热搜API (第三方)
+            url = "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/"
+            resp = requests.get(url, headers={
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X)',
+                'Referer': 'https://www.douyin.com/'
+            }, timeout=10)
+            data = resp.json()
+
+            if data.get('word_list'):
+                for item in data['word_list'][:20]:
+                    word = item.get('word', '')
+
+                    # 匹配板块
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in word:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        trending.append({
+                            'word': word,
+                            'hot_value': item.get('hot_value', 0),
+                            'sectors': list(set(matched_sectors)),
+                            'source': '抖音热搜',
+                        })
+        except Exception as e:
+            print(f"获取抖音热搜失败: {e}")
+
+        # 备用：今日热榜API
+        if not trending:
+            try:
+                url = "https://api.vvhan.com/api/hotlist/douyinHot"
+                resp = requests.get(url, headers=self.headers, timeout=10)
+                data = resp.json()
+
+                if data.get('success') and data.get('data'):
+                    for item in data['data'][:20]:
+                        title = item.get('title', '')
+
+                        matched_sectors = []
+                        for sector, keywords in self.sector_keywords.items():
+                            for kw in keywords:
+                                if kw in title:
+                                    matched_sectors.append(sector)
+                                    break
+
+                        if matched_sectors:
+                            trending.append({
+                                'word': title,
+                                'hot_value': item.get('hot', 0),
+                                'sectors': list(set(matched_sectors)),
+                                'source': '抖音热搜',
+                            })
+            except:
+                pass
+
+        return trending[:5]
+
+    def get_xiaohongshu_trends(self) -> List[Dict]:
+        """获取小红书热门话题"""
+        trends = []
+
+        try:
+            # 小红书热门话题 (第三方API)
+            url = "https://api.vvhan.com/api/hotlist/xiaohongshuHot"
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            data = resp.json()
+
+            if data.get('success') and data.get('data'):
+                for item in data['data'][:20]:
+                    title = item.get('title', '')
+
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in title:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        trends.append({
+                            'word': title,
+                            'hot_value': item.get('hot', 0),
+                            'sectors': list(set(matched_sectors)),
+                            'source': '小红书',
+                        })
+        except Exception as e:
+            print(f"获取小红书热门失败: {e}")
+
+        return trends[:5]
+
+    def get_weibo_trending(self) -> List[Dict]:
+        """获取微博热搜"""
+        trending = []
+
+        try:
+            url = "https://api.vvhan.com/api/hotlist/wbHot"
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            data = resp.json()
+
+            if data.get('success') and data.get('data'):
+                for item in data['data'][:30]:
+                    title = item.get('title', '')
+
+                    matched_sectors = []
+                    for sector, keywords in self.sector_keywords.items():
+                        for kw in keywords:
+                            if kw in title:
+                                matched_sectors.append(sector)
+                                break
+
+                    if matched_sectors:
+                        trending.append({
+                            'word': title,
+                            'hot_value': item.get('hot', 0),
+                            'sectors': list(set(matched_sectors)),
+                            'source': '微博热搜',
+                        })
+        except Exception as e:
+            print(f"获取微博热搜失败: {e}")
+
+        return trending[:5]
+
     def get_yesterday_capital_flow(self) -> List[Dict]:
         """获取昨日资金流向"""
         flows = []
@@ -214,41 +392,88 @@ class MorningPrediction:
         print("📊 正在分析隔夜数据...")
 
         # 收集数据
+        print("  - 获取美股数据...")
         us_data = self.get_us_market_performance()
+
+        print("  - 获取财经新闻...")
         news = self.get_overnight_news()
+
+        print("  - 获取官媒新闻...")
+        official_news = self.get_official_news()
+
+        print("  - 获取抖音热搜...")
+        douyin = self.get_douyin_trending()
+
+        print("  - 获取小红书热门...")
+        xiaohongshu = self.get_xiaohongshu_trends()
+
+        print("  - 获取微博热搜...")
+        weibo = self.get_weibo_trending()
+
+        print("  - 获取资金流向...")
         capital_flow = self.get_yesterday_capital_flow()
+
+        print("  - 获取社交热度...")
         social_heat = self.get_social_heat()
 
-        # 板块评分
+        # 板块评分 (带来源追踪)
         sector_scores = {}
+        sector_sources = {}  # 记录每个板块的信号来源
 
-        # 1. 基于新闻评分
+        def add_score(sector, points, source):
+            sector_scores[sector] = sector_scores.get(sector, 0) + points
+            if sector not in sector_sources:
+                sector_sources[sector] = []
+            sector_sources[sector].append(source)
+
+        # 1. 财经新闻评分 (+20)
         for n in news:
             for sector in n.get('sectors', []):
-                sector_scores[sector] = sector_scores.get(sector, 0) + 20
+                add_score(sector, 20, f"财联社: {n.get('title', '')[:20]}")
 
-        # 2. 基于美股表现评分
+        # 2. 官媒新闻评分 (+30，权重最高)
+        for n in official_news:
+            weight = n.get('weight', 15)
+            for sector in n.get('sectors', []):
+                source_name = "官媒" if n.get('is_official') else "新华网"
+                add_score(sector, weight, f"{source_name}: {n.get('title', '')[:20]}")
+
+        # 3. 抖音热搜评分 (+25，流量风向标)
+        for t in douyin:
+            for sector in t.get('sectors', []):
+                add_score(sector, 25, f"抖音热搜: {t.get('word', '')[:15]}")
+
+        # 4. 小红书热门评分 (+20，年轻消费风向)
+        for t in xiaohongshu:
+            for sector in t.get('sectors', []):
+                add_score(sector, 20, f"小红书: {t.get('word', '')[:15]}")
+
+        # 5. 微博热搜评分 (+20)
+        for t in weibo:
+            for sector in t.get('sectors', []):
+                add_score(sector, 20, f"微博热搜: {t.get('word', '')[:15]}")
+
+        # 6. 基于美股表现评分 (+15)
         for stock in us_data.get('china_concept', []):
             change = stock.get('change_pct', 0)
             if change > 3:
-                # 中概股大涨，利好相关板块
                 name = stock.get('name', '').lower()
                 if '阿里' in name or '京东' in name or '拼多多' in name:
-                    sector_scores['互联网科技'] = sector_scores.get('互联网科技', 0) + 15
+                    add_score('互联网科技', 15, f"中概股: {stock.get('name', '')} +{change:.1f}%")
                 elif '蔚来' in name or '小鹏' in name or '理想' in name:
-                    sector_scores['新能源汽车'] = sector_scores.get('新能源汽车', 0) + 15
+                    add_score('新能源汽车', 15, f"中概股: {stock.get('name', '')} +{change:.1f}%")
                 elif '百度' in name:
-                    sector_scores['AI人工智能'] = sector_scores.get('AI人工智能', 0) + 15
+                    add_score('AI人工智能', 15, f"中概股: {stock.get('name', '')} +{change:.1f}%")
 
-        # 3. 基于资金流向评分
+        # 7. 基于资金流向评分 (+10)
         for flow in capital_flow:
             name = flow.get('name', '')
             inflow = flow.get('net_inflow', 0)
-            if inflow > 1:  # 净流入超过1亿
+            if inflow > 1:
                 for sector, stocks in self.sector_stocks.items():
                     for code, stock_name in stocks:
                         if stock_name in name:
-                            sector_scores[sector] = sector_scores.get(sector, 0) + 10
+                            add_score(sector, 10, f"资金流入: {name} +{inflow:.1f}亿")
                             break
 
         # 排序
@@ -256,20 +481,17 @@ class MorningPrediction:
 
         # 构建预测结果
         predictions = []
-        for sector, score in sorted_sectors[:5]:
-            stars = '⭐⭐⭐' if score >= 40 else '⭐⭐' if score >= 25 else '⭐'
+        for sector, score in sorted_sectors[:6]:
+            stars = '⭐⭐⭐' if score >= 60 else '⭐⭐' if score >= 35 else '⭐'
 
-            # 找出催化剂
-            catalysts = []
-            for n in news:
-                if sector in n.get('sectors', []):
-                    catalysts.append(n.get('title', '')[:30])
+            # 获取信号来源
+            sources = sector_sources.get(sector, [])[:3]
 
             predictions.append({
                 'sector': sector,
                 'score': score,
                 'stars': stars,
-                'catalysts': catalysts[:2],
+                'sources': sources,
                 'stocks': self.sector_stocks.get(sector, [])[:3],
             })
 
@@ -279,11 +501,15 @@ class MorningPrediction:
             if idx.get('change_pct', 0) < -1:
                 risks.append(f"隔夜{idx.get('name', '')}下跌{abs(idx.get('change_pct', 0)):.1f}%")
 
+        # 汇总热搜数据
+        all_trending = douyin + xiaohongshu + weibo
+
         return {
             'time': datetime.now().strftime('%Y-%m-%d %H:%M'),
             'predictions': predictions,
             'capital_flow': capital_flow[:5],
             'social_heat': social_heat[:5],
+            'trending': all_trending[:10],
             'risks': risks,
             'us_market': us_data.get('indices', []),
         }
@@ -298,12 +524,27 @@ class MorningPrediction:
 
 """
         for i, p in enumerate(result['predictions'][:5], 1):
-            content += f"**{i}. {p['sector']}** {p['stars']}\n"
-            if p['catalysts']:
-                content += f"> 催化剂: {p['catalysts'][0]}\n"
+            content += f"**{i}. {p['sector']}** {p['stars']} (评分:{p['score']})\n"
+            # 显示信号来源
+            if p.get('sources'):
+                for src in p['sources'][:2]:
+                    content += f"> - {src}\n"
             content += "\n"
 
-        content += """---
+        # 热搜词云
+        trending = result.get('trending', [])
+        if trending:
+            content += """---
+
+#### 🔥 社交媒体热搜
+
+"""
+            for t in trending[:8]:
+                source_icon = {'抖音热搜': '📱', '小红书': '📕', '微博热搜': '💬'}.get(t.get('source', ''), '📰')
+                content += f"- {source_icon} **{t.get('word', '')[:20]}** ({t.get('source', '')})\n"
+
+        content += """
+---
 
 #### 📊 重点关注标的
 
@@ -312,7 +553,7 @@ class MorningPrediction:
 """
         seen = set()
         for p in result['predictions'][:3]:
-            for code, name in p['stocks']:
+            for code, name in p.get('stocks', []):
                 if code not in seen:
                     content += f"| {name} | {code} | {p['sector']} |\n"
                     seen.add(code)
@@ -325,7 +566,7 @@ class MorningPrediction:
 | 股票 | 净流入(亿) |
 |------|-----------|
 """
-        for flow in result['capital_flow'][:5]:
+        for flow in result.get('capital_flow', [])[:5]:
             content += f"| {flow['name']} | +{flow['net_inflow']:.2f} |\n"
 
         content += """
@@ -334,12 +575,12 @@ class MorningPrediction:
 #### 📈 隔夜美股表现
 
 """
-        for idx in result['us_market']:
+        for idx in result.get('us_market', []):
             change = idx.get('change_pct', 0)
             icon = '🟢' if change > 0 else '🔴' if change < 0 else '⚪'
             content += f"- {icon} {idx['name']}: {change:+.2f}%\n"
 
-        if result['risks']:
+        if result.get('risks'):
             content += """
 ---
 
