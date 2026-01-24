@@ -13,8 +13,11 @@ from datetime import datetime
 from dingtalk_notifier import DingTalkNotifier
 from market_scanner import MarketScanner
 from smart_picker import CapitalFlowTracker
+from morning_prediction import MorningPrediction
+from realtime_hunter import RealtimeHunter
 
 notifier = DingTalkNotifier()
+morning_predictor = MorningPrediction()
 scanner = MarketScanner()
 flow_tracker = CapitalFlowTracker()
 
@@ -29,6 +32,16 @@ WATCH_STOCKS = [
     ('00981', '中芯国际'),
     ('01045', '亚太卫星'),
 ]
+
+
+def push_pre_market():
+    """盘前预判 (9:00)"""
+    print(f"[{datetime.now().strftime('%H:%M')}] 推送盘前预判...")
+    try:
+        morning_predictor.run(push=True)
+        print("✅ 盘前预判已推送")
+    except Exception as e:
+        print(f"❌ 盘前预判推送失败: {e}")
 
 
 def push_morning_brief():
@@ -197,6 +210,7 @@ def run_scheduler():
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
     print("\n定时任务:")
+    print("  • 09:00 - 盘前预判 (NEW!)")
     print("  • 09:30 - 早盘快报")
     print("  • 每30分钟 - 热门板块 (交易时间)")
     print("  • 每小时 - 涨幅榜 + 资金流向 (交易时间)")
@@ -204,6 +218,7 @@ def run_scheduler():
     print("\n")
 
     # 设置定时任务
+    schedule.every().day.at("09:00").do(push_pre_market)
     schedule.every().day.at("09:30").do(push_morning_brief)
     schedule.every().day.at("16:30").do(push_closing_summary)
 
@@ -250,6 +265,8 @@ if __name__ == '__main__':
         cmd = sys.argv[1]
         if cmd == 'test':
             test_push()
+        elif cmd == 'pre':
+            push_pre_market()
         elif cmd == 'morning':
             push_morning_brief()
         elif cmd == 'hot':
@@ -264,6 +281,7 @@ if __name__ == '__main__':
             print("用法:")
             print("  python auto_push.py         - 启动定时推送")
             print("  python auto_push.py test    - 测试所有推送")
+            print("  python auto_push.py pre     - 盘前预判 (09:00)")
             print("  python auto_push.py hot     - 推送热门板块")
             print("  python auto_push.py gainers - 推送涨幅榜")
             print("  python auto_push.py flow    - 推送资金流向")
