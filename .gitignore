@@ -1,41 +1,38 @@
+# Node
+node_modules/
+.next/
+dist/
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.eggs/
-dist/
-build/
+*.pyc
+.venv/
+venv/
 
 # Environment
 .env
-*.env
+.env.local
+*.local
+
+# Database
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+logs/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-.claude/
 
-# Cache
-*.pyc
-.cache/
-**/cache/
-hk_trading_bot/data/cache/
+# Temp
+/tmp/
+*.bak
 
-# Data files
-hk_trading_bot/data/*.json
-
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# API keys and templates
-api/
-templates/
+# Trading bot specific (not part of AgentBay)
+*.json.backup*
+heat_history.db
