@@ -880,6 +880,47 @@ if __name__ == "__main__":
             report = analyzer.analyze(sys.argv[2], include_search_hint=False)
             print(report)
 
+        elif cmd == 'sentiment' and len(sys.argv) > 2:
+            # 社区情绪分析
+            region = sys.argv[2].lower()
+
+            if region == 'reddit' or region == 'wsb':
+                # 使用ApeWisdom API获取实时Reddit数据
+                from social_api_integration import RedditSentimentTracker
+                tracker = RedditSentimentTracker()
+                data = tracker.get_wsb_trending_via_apewisdom()
+                print(tracker.format_apewisdom_report(data))
+
+            elif region == 'korea':
+                from community_sentiment import CommunitySentimentAnalyzer
+                analyzer = CommunitySentimentAnalyzer()
+                print(analyzer.analyze_korea())
+
+            elif region == 'usa':
+                from community_sentiment import CommunitySentimentAnalyzer
+                analyzer = CommunitySentimentAnalyzer()
+                print(analyzer.analyze_usa())
+
+            elif region == 'musk':
+                from community_sentiment import CommunitySentimentAnalyzer
+                analyzer = CommunitySentimentAnalyzer()
+                print(analyzer.analyze_musk())
+
+            elif region == 'all':
+                from community_sentiment import CommunitySentimentAnalyzer
+                analyzer = CommunitySentimentAnalyzer()
+                print(analyzer.analyze_all())
+
+            else:
+                print(f"❌ 未知区域: {region}")
+                print("   支持: reddit/wsb, korea, usa, musk, all")
+
+        elif cmd == 'musk':
+            # 马斯克追踪器
+            from community_sentiment import MuskTracker
+            tracker = MuskTracker()
+            print(tracker.format_tracker_report())
+
         else:
             print("""
 用法:
@@ -890,7 +931,17 @@ if __name__ == "__main__":
   python my_strategy_helper.py summary   # 今日汇总
   python my_strategy_helper.py laggards  # 补涨机会扫描
   python my_strategy_helper.py scarce    # 稀缺股实时行情
-  python my_strategy_helper.py research 02382  # 基本面+研究报告分析
+  python my_strategy_helper.py research 02382    # 基本面+研究报告分析
+  python my_strategy_helper.py sentiment reddit  # Reddit WallStreetBets实时数据 ⭐
+  python my_strategy_helper.py sentiment korea   # 韩国社区情绪
+  python my_strategy_helper.py sentiment usa     # 美国社区情绪
+  python my_strategy_helper.py sentiment musk    # 马斯克动态
+  python my_strategy_helper.py sentiment all     # 全球综合分析
+  python my_strategy_helper.py musk       # 马斯克专用追踪器
+
+新功能 🆕:
+  - sentiment reddit: 实时获取WallStreetBets热门股票 (ApeWisdom API)
+  - 无需配置，直接使用！
             """)
     else:
         main()
