@@ -4,6 +4,7 @@
 煤炭ETF月线级别技术分析
 结合印尼煤炭限量事件
 整合四大师方法论
+数据源: A股(akshare) + 港股(futu)
 """
 import sys
 import os
@@ -11,6 +12,7 @@ sys.path.insert(0, '/Users/mantou/hk-trading-bot')
 
 from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
 
 # 设置环境变量避免protobuf错误
 os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
@@ -21,45 +23,106 @@ except ImportError:
     print("❌ 未安装futu-api")
     sys.exit(1)
 
+try:
+    import akshare as ak
+except ImportError:
+    print("❌ 未安装akshare")
+    print("请运行: pip install akshare")
+    sys.exit(1)
+
 # 煤炭相关标的
 COAL_TARGETS = {
-    # A股煤炭ETF
-    'SH.515220': '煤炭ETF',
+    # A股煤炭龙头
+    'SH.601088': '中国神华',
+    'SH.601225': '陕西煤业',
+    'SH.600188': '兖州煤业',
+    'SH.601898': '中煤能源A',
     # 港股煤炭龙头
     'HK.01171': '兖煤澳大利亚',
-    'HK.01898': '中煤能源',
-    # 港股能源ETF
-    'HK.03046': '南方东英恒生能源',
+    'HK.01898': '中煤能源H',
 }
 
+def get_akshare_monthly_kline(stock_code):
+    """获取A股月K线数据（使用akshare）"""
+    try:
+        # 转换代码格式：SH.601088 -> 601088
+        code_number = stock_code.split('.')[1]
+
+        # 获取月K线数据
+        df = ak.stock_zh_a_hist(
+            symbol=code_number,
+            period="monthly",
+            start_date="20230101",
+            end_date=datetime.now().strftime('%Y%m%d'),
+            adjust="qfq"  # 前复权
+        )
+
+        if df is None or len(df) == 0:
+            return None
+
+        # 统一列名格式（与futu对齐）
+        df = df.rename(columns={
+            '日期': 'time_key',
+            '开盘': 'open',
+            '收盘': 'close',
+            '最高': 'high',
+            '最低': 'low',
+            '成交量': 'volume',
+            '成交额': 'turnover'
+        })
+
+        # 转换数据类型
+        df['open'] = pd.to_numeric(df['open'], errors='coerce')
+        df['close'] = pd.to_numeric(df['close'], errors='coerce')
+        df['high'] = pd.to_numeric(df['high'], errors='coerce')
+        df['low'] = pd.to_numeric(df['low'], errors='coerce')
+        df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
+
+        # 只保留最近24个月
+        df = df.tail(24)
+
+        return df
+
+    except Exception as e:
+        print(f"   获取A股数据失败: {e}")
+        return None
+
 def analyze_monthly_breakout(quote_ctx, code, name):
-    """月线级别突破分析"""
+    """月线级别突破分析（支持A股+港股）"""
     print(f"\n{'='*60}")
     print(f"📊 {name} ({code}) - 月线级别分析")
     print('='*60)
-    
-    # 获取月K线数据（近24个月）
-    result = quote_ctx.request_history_kline(
-        code,
-        start='2023-01-01',
-        end=datetime.now().strftime('%Y-%m-%d'),
-        ktype=KLType.K_MON,
-        max_count=24
-    )
 
-    # 处理不同的返回格式
-    if len(result) == 3:
-        ret, monthly_kline, err_msg = result
-    elif len(result) == 2:
-        ret, monthly_kline = result
+    # 根据代码前缀判断使用哪个数据源
+    if code.startswith('SH.') or code.startswith('SZ.'):
+        # A股：使用akshare
+        monthly_kline = get_akshare_monthly_kline(code)
+        if monthly_kline is None:
+            print(f"❌ 无法获取{name}数据")
+            return None
     else:
-        print(f"❌ 无法获取{name}数据: 返回格式异常")
-        return None
+        # 港股/美股：使用富途
+        result = quote_ctx.request_history_kline(
+            code,
+            start='2023-01-01',
+            end=datetime.now().strftime('%Y-%m-%d'),
+            ktype=KLType.K_MON,
+            max_count=24
+        )
 
-    if ret != RET_OK:
-        print(f"❌ 无法获取{name}数据: {monthly_kline if len(result) == 2 else err_msg}")
-        return None
-    
+        # 处理不同的返回格式
+        if len(result) == 3:
+            ret, monthly_kline, err_msg = result
+        elif len(result) == 2:
+            ret, monthly_kline = result
+        else:
+            print(f"❌ 无法获取{name}数据: 返回格式异常")
+            return None
+
+        if ret != RET_OK:
+            print(f"❌ 无法获取{name}数据: {monthly_kline if len(result) == 2 else err_msg}")
+            return None
+
     if len(monthly_kline) < 12:
         print(f"⚠️ 数据不足（仅{len(monthly_kline)}个月）")
         return None
