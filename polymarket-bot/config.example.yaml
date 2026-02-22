@@ -1,0 +1,112 @@
+# Polymarket Copy Trading Bot - Configuration
+# Based on expert methodologies from skill-from-masters research
+
+# === Sharp Trader Identification ===
+sharp_trader_criteria:
+  win_rate: 0.70                 # Minimum 70% win rate
+  min_trades: 50                 # At least 50 trades for statistical significance
+  min_volume: 10000              # $10K+ total volume
+  max_avg_odds: 0.90             # Don't follow traders betting only on high-probability events
+  recency_days: 30               # Must be active in last 30 days
+  roi: 0.20                      # Minimum 20% ROI
+  consistency_score: 0.60        # Win rate must be consistent across time periods
+
+# === Kelly Criterion Position Sizing ===
+kelly_sizing:
+  use_half_kelly: true           # Use Half-Kelly (recommended) vs Full Kelly
+  use_quarter_kelly: false       # Even more conservative (use instead of half)
+  max_bet_pct: 0.10              # Maximum 10% per trade
+  max_total_exposure_pct: 0.30   # Maximum 30% total open positions
+  min_edge_pct: 0.02             # Minimum 2% Kelly edge required to trade
+
+# === Risk Management ===
+risk_management:
+  # Per-trade limits
+  max_per_trade_pct: 0.10        # 10% max per trade
+  max_per_trade_usd: null        # No absolute USD limit (null = disabled)
+
+  # Position limits
+  max_total_exposure_pct: 0.30   # 30% max total exposure
+  max_per_market_pct: 0.05       # 5% max per market
+  max_per_trader_pct: 0.15       # 15% max following one trader
+
+  # Circuit breakers
+  daily_loss_limit_pct: 0.10     # Stop trading if down 10% in a day
+  consecutive_loss_limit: 5      # Pause after 5 losses in a row
+  sharp_trader_drawdown_pct: 0.30  # Unfollow trader if down 30%
+  api_error_threshold: 10        # Pause if 10 API errors in 1 hour
+
+  # Pre-trade validation
+  min_market_liquidity_usd: 10000  # $10K minimum market liquidity
+  max_slippage_pct: 0.05         # 5% max acceptable slippage
+  max_trade_age_seconds: 60      # Don't copy trades older than 60 seconds
+
+# === Monitoring & Polling ===
+polling:
+  sharp_trader_update_hours: 6   # Update Sharp trader list every 6 hours
+  position_check_seconds: 4      # Check Sharp trader positions every 4 seconds
+  market_data_seconds: 10        # Update market data every 10 seconds
+
+# === API Configuration ===
+api:
+  polymarket_api_url: "https://data-api.polymarket.com"
+  polytrack_api_url: "https://polytrack.io/api"
+  gamma_api_url: "https://gamma-api.polymarket.com"
+  clob_api_url: "https://clob.polymarket.com"
+
+  rate_limits:
+    polymarket_free_tier: 1000   # 1000 calls/hour
+    polytrack_free_tier: 1000    # 1000 calls/hour
+
+# === Database ===
+database:
+  url: "postgresql://user:password@localhost:5432/polymarket_bot"
+  pool_size: 10
+  max_overflow: 20
+
+# === Notifications ===
+notifications:
+  telegram:
+    enabled: true
+    bot_token: "YOUR_BOT_TOKEN"
+    chat_id: "YOUR_CHAT_ID"
+    notify_on_trade: true
+    notify_on_risk_breach: true
+    notify_on_circuit_breaker: true
+
+  email:
+    enabled: false
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    from_email: "bot@example.com"
+    to_email: "you@example.com"
+
+# === Trading Wallet ===
+wallet:
+  private_key: "YOUR_PRIVATE_KEY_HERE"  # Keep secure! Use environment variable in production
+  proxy_wallet_address: "YOUR_PROXY_WALLET_ADDRESS"
+
+# === Blockchain ===
+blockchain:
+  chain_id: 137                  # Polygon mainnet
+  rpc_url: "https://polygon-mainnet.infura.io/v3/YOUR_PROJECT_ID"
+  gas_limit: 5000
+  gas_price_limit: 110000000000  # 110 gwei
+
+# === Backtest Configuration ===
+backtest:
+  enabled: false
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+  initial_bankroll: 10000
+
+# === Logging ===
+logging:
+  level: "INFO"                  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"                 # json or console
+  file: "logs/polymarket_bot.log"
+
+# === Paper Trading Mode ===
+paper_trading:
+  enabled: true                  # Start in paper trading mode
+  initial_balance: 10000

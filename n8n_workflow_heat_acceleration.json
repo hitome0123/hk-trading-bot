@@ -1,0 +1,106 @@
+{
+  "name": "港股热度加速监控",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "name": "每30分钟触发",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { execSync } = require('child_process');\n\ntry {\n  const raw = execSync(\n    'python3 /Users/mantou/hk-trading-bot/n8n_heat_acceleration_detector.py 2>/dev/null',\n    { timeout: 60000, encoding: 'utf-8' }\n  );\n\n  const data = JSON.parse(raw);\n  return [{ json: data }];\n\n} catch(e) {\n  return [{ json: { error: e.message } }];\n}"
+      },
+      "name": "检测热度加速",
+      "type": "n8n-nodes-base.code",
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.all()[0].json;\n\n// 筛选K值 > 0.3 的财经关键词\nconst accelerating = data.all_keywords_with_k.filter(kw => \n  kw.k_value > 0.3\n);\n\nif (accelerating.length === 0) {\n  // 没有加速关键词，停止流程\n  return [];\n}\n\n// 按K值排序\naccelerating.sort((a, b) => b.k_value - a.k_value);\n\nreturn [{ json: { accelerating, stats: data.statistics } }];"
+      },
+      "name": "筛选加速关键词",
+      "type": "n8n-nodes-base.code",
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { accelerating } = $input.all()[0].json;\n\nconst message = `\n🚀 热度加速预警！\n\n检测到 ${accelerating.length} 个热度快速上升的关键词：\n\n${accelerating.slice(0, 5).map((kw, i) => \n  `${i+1}. ${kw.keyword}\n   K值: ${kw.k_value} ${kw.status}\n   来源: ${kw.source}\n`).join('\\n')}\n\n💡 提示: 这些是热度正在上涨中的关键词，不是已经最热的！\n适合提前布局相关股票。\n\n⏰ ${new Date().toLocaleString('zh-CN')}\n`;\n\nreturn [{ json: { message } }];"
+      },
+      "name": "格式化通知",
+      "type": "n8n-nodes-base.code",
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "YOUR_WEBHOOK_URL",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "msgtype": "text",
+          "text": {
+            "content": "={{ $json.message }}"
+          }
+        }
+      },
+      "name": "发送钉钉通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "每30分钟触发": {
+      "main": [
+        [
+          {
+            "node": "检测热度加速",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "检测热度加速": {
+      "main": [
+        [
+          {
+            "node": "筛选加速关键词",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "筛选加速关键词": {
+      "main": [
+        [
+          {
+            "node": "格式化通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "格式化通知": {
+      "main": [
+        [
+          {
+            "node": "发送钉钉通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

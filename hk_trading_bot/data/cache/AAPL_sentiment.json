@@ -1,0 +1,12 @@
+{
+  "ticker": "AAPL",
+  "sentiment_score": 0,
+  "sentiment_trend": "稳定",
+  "key_factors": [
+    "市场不确定性",
+    "缺乏具体数据"
+  ],
+  "recommendation": "需要更多信息进行判断",
+  "confidence": 3,
+  "timestamp": "2026-01-09T19:51:10.116971"
+}

@@ -1,0 +1,375 @@
+{
+  "name": "智能库存管理Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "workflow-trigger",
+      "name": "执行工作流触发器",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取库存信息\nconst order = $input.first().json;\n\nconst skus = order.items.map(item => item.sku);\n\nreturn skus.map(sku => ({json: {sku, order_id: order.order_id}}));"
+      },
+      "id": "extract-skus",
+      "name": "提取SKU列表",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM inventory WHERE sku = '{{$json.sku}}'",
+        "options": {}
+      },
+      "id": "query-current-stock",
+      "name": "查询当前库存",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DATE(created_at) as date, SUM(quantity) as daily_sales FROM sales_history WHERE sku = '{{$json.sku}}' AND created_at > NOW() - INTERVAL '90 days' GROUP BY DATE(created_at) ORDER BY date",
+        "options": {}
+      },
+      "id": "query-sales-trend",
+      "name": "查询销售趋势",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prophet时间序列预测 (简化版)\nconst sku = $input.first().json.sku;\nconst inventory = $('查询当前库存').first().json;\nconst salesTrend = $('查询销售趋势').all().map(i => i.json);\n\n// 计算平均日销量\nconst totalSales = salesTrend.reduce((sum, day) => sum + (day.daily_sales || 0), 0);\nconst avgDailySales = salesTrend.length > 0 ? totalSales / salesTrend.length : 1;\n\n// 计算销量趋势 (简单线性回归)\nlet trendSlope = 0;\nif (salesTrend.length > 7) {\n  const recent = salesTrend.slice(-30);\n  const older = salesTrend.slice(-60, -30);\n  const recentAvg = recent.reduce((sum, d) => sum + d.daily_sales, 0) / recent.length;\n  const olderAvg = older.reduce((sum, d) => sum + d.daily_sales, 0) / older.length;\n  trendSlope = (recentAvg - olderAvg) / olderAvg;\n}\n\n// 季节性调整\nconst month = new Date().getMonth();\nconst seasonalityFactor = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.2, 1.1, 1.0, 0.9, 1.0, 1.4][month];\n\n// 预测未来30天需求\nconst forecastDays = 30;\nconst baseForecast = avgDailySales * (1 + trendSlope) * seasonalityFactor;\nconst forecast30Days = baseForecast * forecastDays;\n\n// 计算库存参数\nconst leadTime = inventory.supplier_lead_time_days || 14;  // 供应商交货时间\nconst leadTimeDemand = baseForecast * leadTime;\nconst safetyStock = leadTimeDemand * 0.5;  // 50%安全库存\nconst reorderPoint = leadTimeDemand + safetyStock;\n\n// 当前库存状态\nconst currentStock = inventory.available_quantity || 0;\nconst inTransit = inventory.in_transit_quantity || 0;\nconst totalStock = currentStock + inTransit;\n\n// 库存天数\nconst daysOfStock = baseForecast > 0 ? totalStock / baseForecast : 999;\n\n// 是否需要补货\nconst needsReorder = totalStock < reorderPoint;\nconst recommendedOrderQty = needsReorder ? Math.ceil(forecast30Days + safetyStock - totalStock) : 0;\n\n// 滞销检测\nconst isSlowMoving = avgDailySales < 0.5 && currentStock > 30;\n\nconst result = {\n  sku: sku,\n  current_stock: currentStock,\n  in_transit: inTransit,\n  total_available: totalStock,\n  avg_daily_sales: parseFloat(avgDailySales.toFixed(2)),\n  forecast_30_days: parseFloat(forecast30Days.toFixed(0)),\n  days_of_stock: parseFloat(daysOfStock.toFixed(1)),\n  reorder_point: parseFloat(reorderPoint.toFixed(0)),\n  safety_stock: parseFloat(safetyStock.toFixed(0)),\n  needs_reorder: needsReorder,\n  recommended_order_qty: recommendedOrderQty,\n  is_slow_moving: isSlowMoving,\n  stock_level: currentStock,  // For compatibility\n  alerts: [],\n  timestamp: new Date().toISOString()\n};\n\n// 生成告警\nif (daysOfStock < 7) {\n  result.alerts.push('CRITICAL: Less than 7 days of stock');\n}\nif (needsReorder) {\n  result.alerts.push(`Reorder recommended: ${recommendedOrderQty} units`);\n}\nif (isSlowMoving) {\n  result.alerts.push('Slow-moving inventory detected');\n}\n\nreturn [{json: result}];"
+      },
+      "id": "forecast-demand",
+      "name": "需求预测算法",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.needs_reorder}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-reorder-needed",
+      "name": "是否需要补货",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "purchase_orders",
+        "columnsToInsert": {
+          "values": [
+            {
+              "column": "sku",
+              "value": "={{$json.sku}}"
+            },
+            {
+              "column": "quantity",
+              "value": "={{$json.recommended_order_qty}}"
+            },
+            {
+              "column": "status",
+              "value": "draft"
+            },
+            {
+              "column": "reason",
+              "value": "Auto-generated by inventory agent"
+            },
+            {
+              "column": "forecast_demand",
+              "value": "={{$json.forecast_30_days}}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{$now.toISO()}}"
+            }
+          ]
+        }
+      },
+      "id": "create-po-draft",
+      "name": "创建补货订单草稿",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1440, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{$credentials.botToken}}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{$credentials.chatId}}"
+            },
+            {
+              "name": "text",
+              "value": "📦 补货建议\\n\\nSKU: {{$json.sku}}\\n当前库存: {{$json.current_stock}}\\n日均销量: {{$json.avg_daily_sales}}\\n剩余天数: {{$json.days_of_stock}}\\n建议补货: {{$json.recommended_order_qty}}\\n\\n⚠️ {{$json.alerts.join(', ')}}"
+            }
+          ]
+        }
+      },
+      "id": "notify-reorder",
+      "name": "补货提醒",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1640, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.is_slow_moving}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-slow-moving",
+      "name": "是否滞销",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{$credentials.botToken}}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{$credentials.chatId}}"
+            },
+            {
+              "name": "text",
+              "value": "⚠️ 滞销预警\\n\\nSKU: {{$json.sku}}\\n当前库存: {{$json.current_stock}}\\n日均销量: {{$json.avg_daily_sales}}\\n\\n建议: 考虑促销或清仓"
+            }
+          ]
+        }
+      },
+      "id": "alert-slow-moving",
+      "name": "滞销告警",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1640, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "inventory_alerts",
+        "columnsToInsert": {
+          "values": [
+            {
+              "column": "sku",
+              "value": "={{$json.sku}}"
+            },
+            {
+              "column": "alert_type",
+              "value": "={{$json.needs_reorder ? 'reorder' : 'slow_moving'}}"
+            },
+            {
+              "column": "current_stock",
+              "value": "={{$json.current_stock}}"
+            },
+            {
+              "column": "recommended_qty",
+              "value": "={{$json.recommended_order_qty}}"
+            },
+            {
+              "column": "alerts",
+              "value": "={{JSON.stringify($json.alerts)}}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{$now.toISO()}}"
+            }
+          ]
+        }
+      },
+      "id": "log-alert",
+      "name": "记录告警",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 格式化输出\nconst inventory = $input.first().json;\n\nconst result = {\n  sku: inventory.sku,\n  stock_level: inventory.current_stock,\n  days_of_stock: inventory.days_of_stock,\n  needs_reorder: inventory.needs_reorder,\n  recommended_order_qty: inventory.recommended_order_qty,\n  alerts: inventory.alerts,\n  forecast_30_days: inventory.forecast_30_days,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{json: result}];"
+      },
+      "id": "format-output",
+      "name": "格式化输出",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 300]
+    }
+  ],
+  "connections": {
+    "执行工作流触发器": {
+      "main": [
+        [
+          {
+            "node": "提取SKU列表",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提取SKU列表": {
+      "main": [
+        [
+          {
+            "node": "查询当前库存",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询当前库存": {
+      "main": [
+        [
+          {
+            "node": "查询销售趋势",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询销售趋势": {
+      "main": [
+        [
+          {
+            "node": "需求预测算法",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "需求预测算法": {
+      "main": [
+        [
+          {
+            "node": "是否需要补货",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "是否滞销",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否需要补货": {
+      "main": [
+        [
+          {
+            "node": "创建补货订单草稿",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "记录告警",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "创建补货订单草稿": {
+      "main": [
+        [
+          {
+            "node": "补货提醒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "补货提醒": {
+      "main": [
+        [
+          {
+            "node": "记录告警",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否滞销": {
+      "main": [
+        [
+          {
+            "node": "滞销告警",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "记录告警",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "滞销告警": {
+      "main": [
+        [
+          {
+            "node": "记录告警",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "记录告警": {
+      "main": [
+        [
+          {
+            "node": "格式化输出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

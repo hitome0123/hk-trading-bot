@@ -1,0 +1,816 @@
+{
+  "name": "跨境电商全栈智能运营系统",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "定时触发器",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-order",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook新订单",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 450],
+      "webhookId": "ecommerce-new-order"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "email-trigger",
+      "name": "供应商邮件监控",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [250, 600]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "手动触发",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 750]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.trigger_source}}",
+              "operation": "equals",
+              "value2": "webhook"
+            }
+          ]
+        }
+      },
+      "id": "route-by-source",
+      "name": "路由-按来源",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 450]
+    },
+    {
+      "parameters": {
+        "url": "https://sellingpartnerapi-na.amazon.com/orders/v0/orders",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "amazonSpApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "CreatedAfter",
+              "value": "={{$now.minus({hours: 1}).toISO()}}"
+            },
+            {
+              "name": "MarketplaceIds",
+              "value": "ATVPDKIKX0DER"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-amazon-orders",
+      "name": "获取Amazon订单",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.ebay.com/sell/fulfillment/v1/order",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ebayApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.accessToken}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-ebay-orders",
+      "name": "获取eBay订单",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 350]
+    },
+    {
+      "parameters": {
+        "url": "https://{{$credentials.shopName}}.myshopify.com/admin/api/2024-01/orders.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "shopifyApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "any"
+            },
+            {
+              "name": "created_at_min",
+              "value": "={{$now.minus({hours: 1}).toISO()}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-shopify-orders",
+      "name": "获取Shopify订单",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '1 hour' AND status = 'pending'",
+        "options": {}
+      },
+      "id": "query-pending-orders",
+      "name": "查询待处理订单",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [650, 650]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{$json.order_id}}_cache"
+      },
+      "id": "check-redis-cache",
+      "name": "检查Redis缓存",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [650, 800]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-all-orders",
+      "name": "合并所有订单",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [850, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 数据清洗和标准化\nconst items = $input.all();\nconst standardized = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // 标准化订单格式\n  const order = {\n    order_id: data.id || data.orderId || data.order_number,\n    platform: data.source || 'unknown',\n    customer_id: data.customer?.id || data.buyerId,\n    items: data.items || data.lineItems || [],\n    total_amount: parseFloat(data.total || data.amount || 0),\n    currency: data.currency || 'USD',\n    status: data.status || 'pending',\n    created_at: data.created_at || data.createdAt || new Date().toISOString(),\n    shipping_address: data.shipping_address || data.shippingAddress || {},\n    metadata: {\n      raw_platform: data.source,\n      processing_timestamp: new Date().toISOString()\n    }\n  };\n  \n  standardized.push({json: order});\n}\n\nreturn standardized;"
+      },
+      "id": "data-cleansing",
+      "name": "数据清洗标准化",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 450]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.total_amount}}",
+              "operation": "larger",
+              "value2": 1000
+            }
+          ]
+        }
+      },
+      "id": "filter-high-value",
+      "name": "筛选-高价值订单",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 450]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.platform}}",
+                    "value2": "amazon"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "amazon"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.platform}}",
+                    "value2": "ebay"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "ebay"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.platform}}",
+                    "value2": "shopify"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "shopify"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-by-platform",
+      "name": "分支-按平台",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1450, 450]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "loop-items",
+      "name": "循环处理订单",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1650, 450]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{$workflow.id}}_customer_service",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "call-customer-service",
+      "name": "调用-智能客服Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{$workflow.id}}_pricing",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "call-pricing-agent",
+      "name": "调用-动态定价Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1850, 400]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{$workflow.id}}_inventory",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "call-inventory-agent",
+      "name": "调用-库存管理Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1850, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI决策结果聚合\nconst customerService = $('调用-智能客服Agent').all();\nconst pricing = $('调用-动态定价Agent').all();\nconst inventory = $('调用-库存管理Agent').all();\n\nconst results = [];\n\nfor (let i = 0; i < customerService.length; i++) {\n  const aggregated = {\n    order_id: customerService[i].json.order_id,\n    customer_service: customerService[i].json,\n    pricing: pricing[i]?.json || {},\n    inventory: inventory[i]?.json || {},\n    timestamp: new Date().toISOString(),\n    decision: {\n      proceed: true,\n      requires_human_review: false,\n      alerts: []\n    }\n  };\n  \n  // 决策逻辑\n  if (customerService[i].json.escalate_to_human) {\n    aggregated.decision.requires_human_review = true;\n    aggregated.decision.alerts.push('Customer service escalation');\n  }\n  \n  if (inventory[i]?.json.stock_level < 10) {\n    aggregated.decision.alerts.push('Low inventory warning');\n  }\n  \n  if (pricing[i]?.json.price_adjustment > 0.15) {\n    aggregated.decision.requires_human_review = true;\n    aggregated.decision.alerts.push('Large price adjustment detected');\n  }\n  \n  results.push({json: aggregated});\n}\n\nreturn results;"
+      },
+      "id": "aggregate-decisions",
+      "name": "聚合AI决策",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.decision.requires_human_review}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-human-review",
+      "name": "是否需要人工审核",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2250, 400]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "orders",
+        "updateKey": "order_id",
+        "fieldsToUpdate": {
+          "values": [
+            {
+              "column": "status",
+              "value": "={{$json.decision.proceed ? 'approved' : 'pending_review'}}"
+            },
+            {
+              "column": "ai_recommendations",
+              "value": "={{JSON.stringify($json)}}"
+            },
+            {
+              "column": "updated_at",
+              "value": "={{$now.toISO()}}"
+            }
+          ]
+        }
+      },
+      "id": "update-database",
+      "name": "更新数据库",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.platform_api_url}}/orders/update",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "order_id",
+              "value": "={{$json.order_id}}"
+            },
+            {
+              "name": "status",
+              "value": "={{$json.decision.proceed ? 'processing' : 'hold'}}"
+            },
+            {
+              "name": "price",
+              "value": "={{$json.pricing.final_price}}"
+            }
+          ]
+        }
+      },
+      "id": "update-platform",
+      "name": "更新平台状态",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2450, 450]
+    },
+    {
+      "parameters": {
+        "url": "https://api.telegram.org/bot{{$credentials.botToken}}/sendMessage",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{$credentials.chatId}}"
+            },
+            {
+              "name": "text",
+              "value": "🔔 订单需要人工审核\\n\\n订单号: {{$json.order_id}}\\n平台: {{$json.customer_service.platform}}\\n金额: {{$json.pricing.final_price}}\\n\\n⚠️ 原因: {{$json.decision.alerts.join(', ')}}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "Markdown"
+            }
+          ]
+        }
+      },
+      "id": "notify-telegram",
+      "name": "Telegram告警",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2450, 550]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "audit_logs",
+        "columnsToInsert": {
+          "values": [
+            {
+              "column": "workflow_id",
+              "value": "={{$workflow.id}}"
+            },
+            {
+              "column": "execution_id",
+              "value": "={{$execution.id}}"
+            },
+            {
+              "column": "order_id",
+              "value": "={{$json.order_id}}"
+            },
+            {
+              "column": "action",
+              "value": "order_processed"
+            },
+            {
+              "column": "details",
+              "value": "={{JSON.stringify($json)}}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{$now.toISO()}}"
+            }
+          ]
+        }
+      },
+      "id": "audit-log",
+      "name": "审计日志",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2650, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 性能指标记录\nconst startTime = $execution.startedAt;\nconst endTime = new Date();\nconst duration = endTime - new Date(startTime);\n\nconst metrics = {\n  execution_id: $execution.id,\n  workflow_id: $workflow.id,\n  duration_ms: duration,\n  items_processed: $input.all().length,\n  success_count: $input.all().filter(i => i.json.decision?.proceed).length,\n  review_count: $input.all().filter(i => i.json.decision?.requires_human_review).length,\n  timestamp: endTime.toISOString()\n};\n\nreturn [{json: metrics}];"
+      },
+      "id": "performance-metrics",
+      "name": "性能指标",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 550]
+    }
+  ],
+  "connections": {
+    "定时触发器": {
+      "main": [
+        [
+          {
+            "node": "获取Amazon订单",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "获取eBay订单",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "获取Shopify订单",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "查询待处理订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook新订单": {
+      "main": [
+        [
+          {
+            "node": "路由-按来源",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "供应商邮件监控": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "手动触发": {
+      "main": [
+        [
+          {
+            "node": "查询待处理订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "路由-按来源": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "获取Amazon订单": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取eBay订单": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "获取Shopify订单": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "查询待处理订单": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "检查Redis缓存": {
+      "main": [
+        [
+          {
+            "node": "合并所有订单",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "合并所有订单": {
+      "main": [
+        [
+          {
+            "node": "数据清洗标准化",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "数据清洗标准化": {
+      "main": [
+        [
+          {
+            "node": "筛选-高价值订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "筛选-高价值订单": {
+      "main": [
+        [
+          {
+            "node": "分支-按平台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "分支-按平台": {
+      "main": [
+        [
+          {
+            "node": "循环处理订单",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "循环处理订单",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "循环处理订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "循环处理订单": {
+      "main": [
+        [
+          {
+            "node": "调用-智能客服Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "调用-动态定价Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "调用-库存管理Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用-智能客服Agent": {
+      "main": [
+        [
+          {
+            "node": "聚合AI决策",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用-动态定价Agent": {
+      "main": [
+        [
+          {
+            "node": "聚合AI决策",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "调用-库存管理Agent": {
+      "main": [
+        [
+          {
+            "node": "聚合AI决策",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "聚合AI决策": {
+      "main": [
+        [
+          {
+            "node": "是否需要人工审核",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否需要人工审核": {
+      "main": [
+        [
+          {
+            "node": "Telegram告警",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "更新数据库",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "更新数据库",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "更新数据库": {
+      "main": [
+        [
+          {
+            "node": "更新平台状态",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "更新平台状态": {
+      "main": [
+        [
+          {
+            "node": "审计日志",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram告警": {
+      "main": [
+        [
+          {
+            "node": "审计日志",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "审计日志": {
+      "main": [
+        [
+          {
+            "node": "性能指标",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-02-03T00:00:00.000Z",
+      "updatedAt": "2026-02-03T00:00:00.000Z",
+      "id": "1",
+      "name": "求职作品"
+    },
+    {
+      "createdAt": "2026-02-03T00:00:00.000Z",
+      "updatedAt": "2026-02-03T00:00:00.000Z",
+      "id": "2",
+      "name": "跨境电商"
+    }
+  ],
+  "triggerCount": 4,
+  "versionId": "1.0.0"
+}

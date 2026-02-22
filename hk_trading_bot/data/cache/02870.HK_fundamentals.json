@@ -1,0 +1,22 @@
+{
+  "ticker": "02870.HK",
+  "company_overview": "02870.HK 基本面分析暂不可用",
+  "financial_health": 5,
+  "growth_prospects": 5,
+  "competitive_position": 5,
+  "valuation": "需要更多数据",
+  "investment_rating": "持有",
+  "key_risks": [
+    "市场风险",
+    "行业风险",
+    "公司特定风险"
+  ],
+  "key_opportunities": [
+    "行业增长",
+    "市场扩张",
+    "技术创新"
+  ],
+  "analyst_summary": "02870.HK 需要更详细的分析数据",
+  "confidence_level": 3,
+  "analysis_timestamp": "2026-01-09T15:56:02.407308"
+}

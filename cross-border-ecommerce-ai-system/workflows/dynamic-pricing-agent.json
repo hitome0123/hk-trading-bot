@@ -1,0 +1,289 @@
+{
+  "name": "动态定价Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "workflow-trigger",
+      "name": "执行工作流触发器",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取产品信息\nconst order = $input.first().json;\n\nconst products = order.items.map(item => ({\n  sku: item.sku,\n  current_price: item.price,\n  quantity: item.quantity,\n  platform: order.platform\n}));\n\nreturn products.map(p => ({json: p}));"
+      },
+      "id": "extract-products",
+      "name": "提取产品信息",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.example.com/competitor-prices",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sku",
+              "value": "={{$json.sku}}"
+            },
+            {
+              "name": "platforms",
+              "value": "[\"amazon\", \"ebay\", \"aliexpress\"]"
+            }
+          ]
+        }
+      },
+      "id": "fetch-competitor-prices",
+      "name": "获取竞品价格",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.exchangerate-api.com/v4/latest/USD",
+        "options": {}
+      },
+      "id": "fetch-fx-rates",
+      "name": "获取汇率",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM sales_history WHERE sku = '{{$json.sku}}' AND created_at > NOW() - INTERVAL '30 days' ORDER BY created_at DESC",
+        "options": {}
+      },
+      "id": "query-sales-history",
+      "name": "查询销售历史",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI定价算法\nconst product = $input.first().json;\nconst competitors = $('获取竞品价格').first().json.prices || [];\nconst fxRates = $('获取汇率').first().json.rates;\nconst salesHistory = $('查询销售历史').all().map(i => i.json);\n\n// 计算竞品平均价格\nconst competitorAvg = competitors.reduce((sum, p) => sum + p.price, 0) / competitors.length;\n\n// 计算需求弹性 (基于历史销量)\nconst avgDailySales = salesHistory.length > 0 \n  ? salesHistory.reduce((sum, s) => sum + s.quantity, 0) / 30 \n  : 1;\n\n// 季节性因子 (简化版)\nconst month = new Date().getMonth();\nconst seasonalityFactor = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.2, 1.1, 1.0, 0.9, 1.0, 1.4][month];\n\n// 库存压力因子 (假设)\nconst stockLevel = product.stock_level || 100;\nconst stockPressure = stockLevel < 20 ? 1.1 : stockLevel > 200 ? 0.95 : 1.0;\n\n// ML定价模型 (简化版RandomForest逻辑)\nconst features = [\n  competitorAvg,\n  fxRates.CNY || 7.0,  // 人民币汇率\n  avgDailySales,\n  seasonalityFactor,\n  stockPressure\n];\n\n// 简单加权计算 (实际应该用真实ML模型)\nconst basePrice = product.cost * 1.3;  // 30%毛利\nconst optimalPrice = basePrice * seasonalityFactor * stockPressure;\n\n// 价格约束\nconst minPrice = product.cost * 1.2;  // 最低20%利润\nconst maxPrice = competitorAvg * 1.15;  // 不超过竞品15%\n\nconst finalPrice = Math.max(minPrice, Math.min(maxPrice, optimalPrice));\nconst priceAdjustment = (finalPrice - product.current_price) / product.current_price;\n\nconst result = {\n  sku: product.sku,\n  current_price: product.current_price,\n  recommended_price: parseFloat(finalPrice.toFixed(2)),\n  price_adjustment: parseFloat(priceAdjustment.toFixed(3)),\n  competitor_avg_price: parseFloat(competitorAvg.toFixed(2)),\n  confidence: 0.85,\n  factors: {\n    seasonality: seasonalityFactor,\n    stock_pressure: stockPressure,\n    demand_score: avgDailySales,\n    fx_rate_cny: fxRates.CNY\n  },\n  reasoning: `Adjusted by ${(priceAdjustment * 100).toFixed(1)}% based on market conditions`,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{json: result}];"
+      },
+      "id": "calculate-optimal-price",
+      "name": "计算最优价格",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{Math.abs($json.price_adjustment)}}",
+              "operation": "larger",
+              "value2": 0.1
+            }
+          ]
+        }
+      },
+      "id": "if-large-adjustment",
+      "name": "是否大幅调价",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{$credentials.botToken}}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{$credentials.chatId}}"
+            },
+            {
+              "name": "text",
+              "value": "⚠️ 大幅价格调整需要审批\\n\\nSKU: {{$json.sku}}\\n当前价格: ${{$json.current_price}}\\n建议价格: ${{$json.recommended_price}}\\n调整幅度: {{($json.price_adjustment * 100).toFixed(1)}}%\\n\\n理由: {{$json.reasoning}}"
+            }
+          ]
+        }
+      },
+      "id": "request-approval",
+      "name": "请求人工审批",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1640, 200]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "price_history",
+        "columnsToInsert": {
+          "values": [
+            {
+              "column": "sku",
+              "value": "={{$json.sku}}"
+            },
+            {
+              "column": "old_price",
+              "value": "={{$json.current_price}}"
+            },
+            {
+              "column": "new_price",
+              "value": "={{$json.recommended_price}}"
+            },
+            {
+              "column": "adjustment_pct",
+              "value": "={{$json.price_adjustment}}"
+            },
+            {
+              "column": "reasoning",
+              "value": "={{$json.reasoning}}"
+            },
+            {
+              "column": "approved",
+              "value": "={{$json.price_adjustment < 0.1 ? true : false}}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{$now.toISO()}}"
+            }
+          ]
+        }
+      },
+      "id": "log-price-change",
+      "name": "记录价格变更",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 格式化输出\nconst pricing = $input.first().json;\n\nconst result = {\n  sku: pricing.sku,\n  final_price: pricing.recommended_price,\n  price_adjustment: pricing.price_adjustment,\n  requires_approval: Math.abs(pricing.price_adjustment) > 0.1,\n  confidence: pricing.confidence,\n  factors: pricing.factors,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{json: result}];"
+      },
+      "id": "format-output",
+      "name": "格式化输出",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 300]
+    }
+  ],
+  "connections": {
+    "执行工作流触发器": {
+      "main": [
+        [
+          {
+            "node": "提取产品信息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提取产品信息": {
+      "main": [
+        [
+          {
+            "node": "获取竞品价格",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取竞品价格": {
+      "main": [
+        [
+          {
+            "node": "获取汇率",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取汇率": {
+      "main": [
+        [
+          {
+            "node": "查询销售历史",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查询销售历史": {
+      "main": [
+        [
+          {
+            "node": "计算最优价格",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "计算最优价格": {
+      "main": [
+        [
+          {
+            "node": "是否大幅调价",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否大幅调价": {
+      "main": [
+        [
+          {
+            "node": "请求人工审批",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "记录价格变更",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "请求人工审批": {
+      "main": [
+        [
+          {
+            "node": "记录价格变更",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "记录价格变更": {
+      "main": [
+        [
+          {
+            "node": "格式化输出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

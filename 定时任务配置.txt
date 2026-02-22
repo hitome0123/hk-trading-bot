@@ -1,0 +1,122 @@
+# 板块交易顾问 - 定时任务配置说明
+
+## 🕐 运行时间表
+
+港股交易时间：周一至周五 09:30-16:00
+
+建议扫描时间：
+- 10:00 - 开盘30分钟，观察方向
+- 11:30 - 午盘前，看强势板块
+- 13:30 - 下午开盘，看延续性
+- 15:30 - 尾盘，总结当天
+
+## 📝 设置方法
+
+### 方法1: 使用crontab（推荐）
+
+1. 编辑crontab：
+```bash
+crontab -e
+```
+
+2. 添加以下内容：
+```
+# 板块交易顾问 - 每天4次扫描
+0 10,11,13,15 * * 1-5 /Users/mantou/hk-trading-bot/run_advisor.sh
+```
+
+解释：
+- `0 10,11,13,15` - 每天10:00, 11:30, 13:30, 15:30
+- `* * 1-5` - 周一到周五
+- 其他时间不运行（港股休市）
+
+3. 保存并退出（按ESC，输入:wq）
+
+4. 验证：
+```bash
+crontab -l
+```
+
+### 方法2: 手动运行
+
+任何时候想立即分析：
+```bash
+cd ~/hk-trading-bot
+./run_advisor.sh
+```
+
+或：
+```bash
+python3 ~/hk-trading-bot/sector_trading_advisor.py
+```
+
+## 📊 查看日志
+
+```bash
+# 查看最近的运行日志
+tail -f ~/hk-trading-bot/logs/advisor_cron.log
+
+# 查看今天的所有记录
+grep "$(date +%Y-%m-%d)" ~/hk-trading-bot/logs/advisor_cron.log
+```
+
+## ⚠️ 注意事项
+
+1. **富途OpenD必须运行**
+   - 定时任务前确保OpenD已启动
+   - 或在脚本中添加自动启动逻辑
+
+2. **网络连接**
+   - Gemini搜索需要网络
+   - 如果网络不稳定，会降级到规则分析
+
+3. **Telegram推送**
+   - 确保Token和ChatID正确
+   - 测试：`curl https://api.telegram.org/bot<TOKEN>/getMe`
+
+## 🔧 故障排查
+
+### 问题1: cron任务没执行
+
+检查cron日志：
+```bash
+log show --predicate 'subsystem == "com.vix.cron"' --last 1h
+```
+
+### 问题2: 脚本报错
+
+手动运行测试：
+```bash
+bash -x ~/hk-trading-bot/run_advisor.sh
+```
+
+### 问题3: 收不到推送
+
+检查环境变量：
+```bash
+printenv | grep GEMINI_API_KEY
+```
+
+## 💡 高级配置
+
+### 只在特定日子运行
+
+```bash
+# 只在周一和周五运行
+0 10 * * 1,5 /Users/mantou/hk-trading-bot/run_advisor.sh
+```
+
+### 盘前预警（8:00扫描全球新闻）
+
+```bash
+# 每天早上8点扫描
+0 8 * * 1-5 /Users/mantou/hk-trading-bot/run_advisor.sh
+```
+
+### 节假日暂停
+
+港股节假日需要手动暂停cron，或在脚本中加日期判断。
+
+---
+
+**配置完成后，系统将自动运行，每天推送4次交易建议到Telegram！** 🚀

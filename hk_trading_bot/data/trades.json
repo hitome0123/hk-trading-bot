@@ -1,0 +1,140 @@
+[
+  {
+    "order_id": "4721965f",
+    "timestamp": "2026-01-09T15:40:45.234448",
+    "ticker": "0700.HK",
+    "side": "buy",
+    "quantity": 0,
+    "price": 54.99540375371953,
+    "amount": 0.0,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  },
+  {
+    "order_id": "5ce20025",
+    "timestamp": "2026-01-09T15:40:45.235022",
+    "ticker": "0005.HK",
+    "side": "buy",
+    "quantity": 0,
+    "price": 54.99540375371953,
+    "amount": 0.0,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  },
+  {
+    "order_id": "0dcea9f0",
+    "timestamp": "2026-01-09T15:40:45.235368",
+    "ticker": "0941.HK",
+    "side": "buy",
+    "quantity": 0,
+    "price": 54.99540375371953,
+    "amount": 0.0,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  },
+  {
+    "order_id": "6ffb7222",
+    "timestamp": "2026-01-09T15:41:31.398498",
+    "ticker": "0700.HK",
+    "side": "buy",
+    "quantity": 100,
+    "price": 54.99540375371953,
+    "amount": 5499.540375371953,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  },
+  {
+    "order_id": "2277f43c",
+    "timestamp": "2026-01-09T15:41:31.398998",
+    "ticker": "0005.HK",
+    "side": "buy",
+    "quantity": 100,
+    "price": 54.99540375371953,
+    "amount": 5499.540375371953,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  },
+  {
+    "order_id": "7bfb33ae",
+    "timestamp": "2026-01-09T15:41:31.399382",
+    "ticker": "0941.HK",
+    "side": "buy",
+    "quantity": 100,
+    "price": 54.99540375371953,
+    "amount": 5499.540375371953,
+    "order_type": "market",
+    "signal_info": {
+      "entry_price": 55.09540375371953,
+      "signal": "LONG",
+      "reason": "Oversold bounce opportunity (RSI=10.8 < 30)",
+      "current_price": 55.3706592513689,
+      "indicators": {
+        "ema20": 56.24345461012971,
+        "ema50": 66.88653216249439,
+        "rsi14": 10.829840961159476,
+        "atr14": 1.1010219905974874
+      },
+      "atr_buffer": 0.5505109952987437
+    }
+  }
+]

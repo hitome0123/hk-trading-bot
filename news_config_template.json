@@ -1,0 +1,50 @@
+{
+  "comment": "真实资讯数据源配置 - 从股吧/雪球/淘股吧获取真实讨论",
+
+  "xueqiu": {
+    "enabled": false,
+    "comment": "雪球 - 需要登录后获取cookie（推荐开启）",
+    "cookie": "在这里填入雪球cookie",
+    "instructions": [
+      "1. 登录 https://xueqiu.com",
+      "2. 按 F12 打开开发者工具",
+      "3. 点击 Network (网络) 标签",
+      "4. 刷新页面",
+      "5. 找到任意请求，右键 Copy -> Copy Request Headers",
+      "6. 找到 Cookie: 那一行，复制整个cookie值",
+      "7. 粘贴到上面的 cookie 字段",
+      "8. 设置 enabled: true"
+    ],
+    "cookie_example": "xq_a_token=xxx; xq_r_token=xxx; xq_id_token=xxx; u=xxx"
+  },
+
+  "eastmoney": {
+    "enabled": true,
+    "comment": "东方财富股吧 - 默认开启，无需cookie也能获取部分内容",
+    "cookie": "",
+    "instructions": [
+      "东方财富股吧默认可以访问，无需登录",
+      "如需获取更多内容，可登录后获取cookie："
+    ]
+  },
+
+  "taoguba": {
+    "enabled": false,
+    "comment": "淘股吧 - API较复杂，暂时禁用",
+    "cookie": ""
+  },
+
+  "futu": {
+    "enabled": true,
+    "comment": "富途公告 - 通过OpenD API直接获取，无需配置"
+  },
+
+  "sentiment_weights": {
+    "comment": "情绪权重配置",
+    "price_change": 1.0,
+    "keyword_match": 1.5,
+    "sector_heat": 0.5
+  },
+
+  "usage_note": "将此文件复制为 news_config.json 并填入你的cookie"
+}

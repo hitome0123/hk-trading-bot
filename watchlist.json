@@ -1,0 +1,26 @@
+{
+  "description": "港股自选股监控列表",
+  "updated": "2026-02-22",
+  "categories": {
+    "持仓股票": [
+      {"code": "HK.01929", "name": "周大福", "sector": "零售"},
+      {"code": "HK.00386", "name": "中石化", "sector": "能源"},
+      {"code": "HK.01024", "name": "快手", "sector": "互联网"},
+      {"code": "HK.09618", "name": "京东", "sector": "互联网"},
+      {"code": "HK.02357", "name": "中航科工", "sector": "军工"},
+      {"code": "HK.06082", "name": "壁仞科技", "sector": "GPU芯片"},
+      {"code": "HK.00981", "name": "中芯国际", "sector": "半导体"}
+    ],
+    "稀缺股观察": [
+      {"code": "HK.02513", "name": "智谱", "sector": "AI大模型"},
+      {"code": "HK.00100", "name": "MiniMax", "sector": "AI大模型"},
+      {"code": "HK.09880", "name": "优必选", "sector": "人形机器人"},
+      {"code": "HK.09903", "name": "天数智芯", "sector": "GPU芯片"}
+    ],
+    "热门板块龙头": [
+      {"code": "HK.09988", "name": "阿里巴巴", "sector": "互联网"},
+      {"code": "HK.00700", "name": "腾讯", "sector": "互联网"},
+      {"code": "HK.03690", "name": "美团", "sector": "互联网"}
+    ]
+  }
+}

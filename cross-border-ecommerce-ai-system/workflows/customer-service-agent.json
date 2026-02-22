@@ -1,0 +1,341 @@
+{
+  "name": "智能客服Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "workflow-trigger",
+      "name": "执行工作流触发器",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取客户消息和上下文\nconst order = $input.first().json;\n\nconst context = {\n  order_id: order.order_id,\n  customer_id: order.customer_id,\n  customer_message: order.customer_message || '',\n  order_status: order.status,\n  order_history: order.order_history || [],\n  language: order.customer_language || 'en',\n  sentiment: null,\n  requires_translation: order.customer_language !== 'en'\n};\n\nreturn [{json: context}];"
+      },
+      "id": "extract-context",
+      "name": "提取上下文",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.requires_translation}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-translate",
+      "name": "是否需要翻译",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepl.com/v2/translate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "auth_key",
+              "value": "={{$credentials.deeplApiKey}}"
+            },
+            {
+              "name": "text",
+              "value": "={{$json.customer_message}}"
+            },
+            {
+              "name": "target_lang",
+              "value": "EN"
+            },
+            {
+              "name": "source_lang",
+              "value": "={{$json.language.toUpperCase()}}"
+            }
+          ]
+        }
+      },
+      "id": "translate-message",
+      "name": "翻译客户消息",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [840, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a professional e-commerce customer service agent. Analyze the customer's message sentiment and determine if escalation to human support is needed.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Customer message: {{ $json.customer_message }}\\nOrder ID: {{ $json.order_id }}\\nOrder status: {{ $json.order_status }}\\n\\nAnalyze sentiment (positive/neutral/negative) and decide if human escalation is needed. Return JSON with: sentiment_score (-1 to 1), confidence (0 to 1), escalate_to_human (boolean), suggested_actions (array).\"\n    }\n  ],\n  \"temperature\": 0.3\n}",
+        "options": {}
+      },
+      "id": "sentiment-analysis",
+      "name": "GPT情感分析",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{$json.customer_id}}_chat_history"
+      },
+      "id": "get-chat-memory",
+      "name": "获取聊天记忆",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful e-commerce customer service agent. Provide professional, empathetic responses. Previous conversation: {{ $('获取聊天记忆').first().json.value || 'None' }}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.customer_message }}\\n\\nOrder details: {{ JSON.stringify($json) }}\\n\\nProvide a helpful response addressing the customer's concern.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 500\n}",
+        "options": {}
+      },
+      "id": "generate-response",
+      "name": "生成AI回复",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.escalate_to_human}}",
+              "value2": true
+            }
+          ],
+          "number": [
+            {
+              "value1": "={{$json.sentiment_score}}",
+              "operation": "smaller",
+              "value2": -0.5
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "if-escalate",
+      "name": "是否需要升级",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{$json.customer_id}}_escalated",
+        "value": "=true",
+        "ttl": 86400
+      },
+      "id": "flag-escalation",
+      "name": "标记人工升级",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1840, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 Customer escalation needed\\n\\nOrder: {{$json.order_id}}\\nCustomer: {{$json.customer_id}}\\nSentiment: {{$json.sentiment_score}}\\nMessage: {{$json.customer_message}}"
+            }
+          ]
+        }
+      },
+      "id": "notify-team",
+      "name": "通知人工客服",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2040, 200]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{$json.customer_id}}_chat_history",
+        "value": "={{JSON.stringify($json.conversation_history)}}",
+        "ttl": 604800
+      },
+      "id": "update-memory",
+      "name": "更新聊天记忆",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [1840, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 格式化最终输出\nconst sentiment = $('GPT情感分析').first().json;\nconst response = $('生成AI回复').first().json;\nconst escalated = $('是否需要升级').first().json;\n\nconst result = {\n  order_id: $input.first().json.order_id,\n  customer_id: $input.first().json.customer_id,\n  platform: $input.first().json.platform,\n  ai_response: response.choices[0].message.content,\n  sentiment_score: sentiment.sentiment_score || 0,\n  confidence: sentiment.confidence || 0,\n  escalate_to_human: escalated || false,\n  suggested_actions: sentiment.suggested_actions || [],\n  language: $input.first().json.language,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{json: result}];"
+      },
+      "id": "format-output",
+      "name": "格式化输出",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 300]
+    }
+  ],
+  "connections": {
+    "执行工作流触发器": {
+      "main": [
+        [
+          {
+            "node": "提取上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提取上下文": {
+      "main": [
+        [
+          {
+            "node": "是否需要翻译",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否需要翻译": {
+      "main": [
+        [
+          {
+            "node": "翻译客户消息",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GPT情感分析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "翻译客户消息": {
+      "main": [
+        [
+          {
+            "node": "GPT情感分析",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT情感分析": {
+      "main": [
+        [
+          {
+            "node": "获取聊天记忆",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "获取聊天记忆": {
+      "main": [
+        [
+          {
+            "node": "生成AI回复",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "生成AI回复": {
+      "main": [
+        [
+          {
+            "node": "是否需要升级",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "是否需要升级": {
+      "main": [
+        [
+          {
+            "node": "标记人工升级",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "更新聊天记忆",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "标记人工升级": {
+      "main": [
+        [
+          {
+            "node": "通知人工客服",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "通知人工客服": {
+      "main": [
+        [
+          {
+            "node": "格式化输出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "更新聊天记忆": {
+      "main": [
+        [
+          {
+            "node": "格式化输出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}

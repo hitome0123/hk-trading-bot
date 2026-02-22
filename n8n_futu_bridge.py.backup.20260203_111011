@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""
+FutuOpenD Data Bridge for n8n Workflow
+Connects to FutuOpenD, fetches real-time quotes + K-line data for candidate stocks,
+calculates technical indicators (RSI, MACD, ATR, Support/Resistance),
+outputs JSON to stdout for n8n Execute Command node.
+
+Uses OS-level fd redirection to suppress ALL Futu SDK log output (including threads).
+"""
+import json
+import sys
+import os
+import tempfile
+import logging
+import warnings
+from datetime import datetime
+
+warnings.filterwarnings("ignore")
+logging.disable(logging.CRITICAL)
+
+# --- OS-level stdout suppression ---
+# Save real stdout file descriptor
+_stdout_fd = os.dup(1)
+# Open /dev/null and redirect fd 1 to it
+_devnull = os.open(os.devnull, os.O_WRONLY)
+os.dup2(_devnull, 1)
+os.close(_devnull)
+
+try:
+    from futu import (
+        OpenQuoteContext, KLType, SubType, KL_FIELD,
+        RET_OK, Market
+    )
+    FUTU_AVAILABLE = True
+except ImportError:
+    FUTU_AVAILABLE = False
+
+# Restore stdout for our own output at the very end (keep suppressed during work)
+# We'll write to _stdout_fd directly when ready
+
+
+def _output_json(data):
+    """Write JSON to the real stdout fd, bypassing any SDK hijacking."""
+    os.dup2(_stdout_fd, 1)
+    sys.stdout = os.fdopen(1, 'w', closefd=False)
+    print(json.dumps(data, ensure_ascii=False))
+    sys.stdout.flush()
+
+
+# 16 candidate stocks for T-trading
+CANDIDATES = [
+    ("HK.09988", "阿里巴巴"), ("HK.00700", "腾讯控股"), ("HK.03690", "美团"),
+    ("HK.01810", "小米集团"), ("HK.09618", "京东集团"), ("HK.01024", "快手"),
+    ("HK.09888", "百度集团"), ("HK.01211", "比亚迪"), ("HK.02015", "理想汽车"),
+    ("HK.09868", "小鹏汽车"), ("HK.09866", "蔚来"), ("HK.00981", "中芯国际"),
+    ("HK.01347", "华虹半导体"), ("HK.06969", "思摩尔"), ("HK.00020", "商汤"),
+    ("HK.01045", "亚太卫星"),
+]
+
+
+def calc_rsi(closes, period=14):
+    if len(closes) < period + 1:
+        return 50.0
+    gains, losses = 0.0, 0.0
+    for i in range(len(closes) - period, len(closes)):
+        delta = closes[i] - closes[i - 1]
+        if delta > 0:
+            gains += delta
+        else:
+            losses -= delta
+    avg_gain = gains / period
+    avg_loss = losses / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - 100 / (1 + rs), 2)
+
+
+def calc_macd(closes, fast=12, slow=26, signal=9):
+    if len(closes) < slow + signal:
+        return {"macd": 0, "signal": 0, "histogram": 0, "trend": "neutral"}
+
+    def ema(data, period):
+        k = 2 / (period + 1)
+        result = [data[0]]
+        for i in range(1, len(data)):
+            result.append(data[i] * k + result[-1] * (1 - k))
+        return result
+
+    ema_fast = ema(closes, fast)
+    ema_slow = ema(closes, slow)
+    macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
+    signal_line = ema(macd_line[slow - 1:], signal)
+    macd_val = round(macd_line[-1], 4)
+    signal_val = round(signal_line[-1], 4)
+    hist = round(macd_val - signal_val, 4)
+    trend = "bullish" if hist > 0 else ("bearish" if hist < 0 else "neutral")
+    return {"macd": macd_val, "signal": signal_val, "histogram": hist, "trend": trend}
+
+
+def calc_atr(highs, lows, closes, period=14):
+    if len(closes) < period + 1:
+        return 0.0
+    trs = []
+    for i in range(1, len(closes)):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        trs.append(tr)
+    return round(sum(trs[-period:]) / period, 4)
+
+
+def main():
+    if not FUTU_AVAILABLE:
+        _output_json({"error": "futu-api not installed", "stocks": []})
+        return
+
+    ctx = None
+    results = []
+    try:
+        ctx = OpenQuoteContext(host="127.0.0.1", port=11111)
+        codes = [c[0] for c in CANDIDATES]
+
+        # Batch get snapshots (real-time quotes)
+        ret, snapshots = ctx.get_market_snapshot(codes)
+        snap_map = {}
+        if ret == RET_OK and snapshots is not None:
+            for _, row in snapshots.iterrows():
+                snap_map[row["code"]] = row
+
+        # Get K-line data for each stock (60 days daily)
+        for code, name in CANDIDATES:
+            stock = {"code": code, "name": name}
+
+            # Real-time quote from snapshot
+            if code in snap_map:
+                s = snap_map[code]
+                stock.update({
+                    "price": float(s.get("last_price", 0)),
+                    "open": float(s.get("open_price", 0)),
+                    "high": float(s.get("high_price", 0)),
+                    "low": float(s.get("low_price", 0)),
+                    "prevClose": float(s.get("prev_close_price", 0)),
+                    "volume": int(s.get("volume", 0)),
+                    "turnover": float(s.get("turnover", 0)),
+                    "amplitude": float(s.get("amplitude", 0)),
+                    "changePct": round(
+                        (float(s.get("last_price", 0)) - float(s.get("prev_close_price", 1)))
+                        / float(s.get("prev_close_price", 1)) * 100, 2
+                    ) if s.get("prev_close_price", 0) > 0 else 0,
+                    "turnoverRate": float(s.get("turnover_rate", 0)),
+                })
+            else:
+                stock.update({"price": 0, "error": "no_snapshot"})
+                results.append(stock)
+                continue
+
+            # K-line data (daily, 60 bars)
+            ret_k, klines, _ = ctx.request_history_kline(
+                code, ktype=KLType.K_DAY, max_count=60
+            )
+            if ret_k == RET_OK and klines is not None and len(klines) > 0:
+                closes = klines["close"].tolist()
+                highs = klines["high"].tolist()
+                lows = klines["low"].tolist()
+
+                stock["rsi"] = calc_rsi(closes)
+                stock["macd"] = calc_macd(closes)
+                stock["atr"] = calc_atr(highs, lows, closes)
+                stock["atrPct"] = round(stock["atr"] / stock["price"] * 100, 2) if stock["price"] > 0 else 0
+
+                # Support / Resistance (Pivot Point)
+                prev_h = highs[-2] if len(highs) >= 2 else stock["high"]
+                prev_l = lows[-2] if len(lows) >= 2 else stock["low"]
+                prev_c = closes[-2] if len(closes) >= 2 else stock["prevClose"]
+                pivot = round((prev_h + prev_l + prev_c) / 3, 3)
+                stock["pivot"] = pivot
+                stock["support1"] = round(2 * pivot - prev_h, 3)
+                stock["support2"] = round(pivot - (prev_h - prev_l), 3)
+                stock["resistance1"] = round(2 * pivot - prev_l, 3)
+                stock["resistance2"] = round(pivot + (prev_h - prev_l), 3)
+
+                # Volume analysis (last 5 days avg vs today)
+                vols = klines["volume"].tolist()
+                avg_vol_5 = sum(vols[-6:-1]) / 5 if len(vols) >= 6 else sum(vols) / len(vols)
+                stock["volumeRatio"] = round(stock["volume"] / avg_vol_5, 2) if avg_vol_5 > 0 else 1.0
+                stock["volumeStatus"] = (
+                    "heavy" if stock["volumeRatio"] >= 1.5
+                    else ("normal" if stock["volumeRatio"] >= 0.7 else "light")
+                )
+            else:
+                stock.update({"rsi": 50, "macd": {"trend": "unknown"}, "atr": 0})
+
+            results.append(stock)
+
+    except Exception as e:
+        _output_json({
+            "error": str(e),
+            "stocks": results,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        return
+    finally:
+        if ctx:
+            ctx.close()
+
+    output = {
+        "stocks": results,
+        "count": len(results),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": "FutuOpenD"
+    }
+    _output_json(output)
+
+
+if __name__ == "__main__":
+    main()
