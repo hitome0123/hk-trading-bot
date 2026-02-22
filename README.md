@@ -1,214 +1,462 @@
-# 港股交易机器人 (HK Trading Bot)
+# HK Trading Bot - 港股智能交易系统
 
-> 整合 Larry Williams、Victor Sperandeo、Jesse Livermore、Mark Minervini 四大交易大师方法论
->
-> 5万本金，日赚300→500→800→1000元渐进体系
+> 7×24 自动化监控 + AI 分析 + Telegram 实时推送
 
-一个基于四大师交易理论的港股T+0交易系统，使用Python + 富途OpenD实现。
+基于四大交易大师方法论（Larry Williams、Victor Sperandeo、Jesse Livermore、Mark Minervini），整合多平台情绪分析的港股智能交易系统。
 
-## 📚 完整策略手册
-
-**⭐ 核心文档**：[港股交易完整策略手册 v2.0](./港股交易完整策略手册_v2.0.md)
-
-包含：
-- ✅ 五条铁律（必须打印贴在屏幕旁）
-- ✅ 四大师方法论整合（Williams/Sperandeo/Livermore/Minervini）
-- ✅ 三大策略组合（T+0狙击/堕落天使/稀缺股波段）
-- ✅ 渐进目标体系（Lv.1→Lv.4）
-- ✅ 完整选股系统（40+只股票池）
-- ✅ 实战案例分析
-
-## 🎯 项目特性
-
-## 🎯 项目特性
-
-### 基础功能
-- **纸上交易**: 100% 模拟交易，无真实资金风险
-- **技术指标**: 集成EMA20、EMA50、RSI14、ATR14指标计算
-- **智能入场**: 基于技术分析的自动入场价格计算
-- **风险控制**: 多重风险检查机制
-- **模块化设计**: 清晰的代码结构，易于扩展
-
-### 🚀 增强功能 (New!)
-- **真实数据**: Yahoo Finance MCP + 直接API双重数据源
-- **AI基本面分析**: Gemini AI驱动的公司基本面分析
-- **市场情绪分析**: 基于AI的市场情绪判断
-- **综合评分系统**: 技术面+基本面+情绪面综合评分
-- **智能缓存**: 节省API调用，提高响应速度
-- **数据质量评估**: 自动评估数据可靠性
-
-## 📁 项目结构
+## 系统架构
 
 ```
-hk_trading_bot/
-├── modules/
-│   ├── indicators/          # 技术指标模块
-│   ├── entry_pricing/       # 入场定价策略
-│   ├── risk_gate/          # 风险控制
-│   └── execution_paper/    # 模拟交易执行
-├── data/                   # 交易数据存储
-├── logs/                   # 日志文件
-└── tests/                  # 测试文件
-
-main.py                     # 主程序入口
-demo_script.py             # 完整演示脚本
-requirements.txt           # 依赖包
+┌─────────────────────────────────────────────────────────────────┐
+│                    HK Trading Bot 双系统架构                      │
+├─────────────────────────────┬───────────────────────────────────┤
+│      本地 Mac (盘中)         │          阿里云 (7×24)            │
+├─────────────────────────────┼───────────────────────────────────┤
+│  📊 热门板块推送              │  🔔 情绪变化监控                   │
+│  sector_trading_advisor.py   │  cloud_sentiment_monitor.py       │
+│                             │                                    │
+│  推送时间：                  │  推送时间：                        │
+│  09:20 / 10:30              │  08:30 盘前提醒                    │
+│  14:00 / 15:30              │  09:30-16:00 实时告警              │
+│                             │  16:30 盘后报告                    │
+│                             │                                    │
+│  依赖：富途 OpenD            │  依赖：无 (纯云端)                  │
+└─────────────────────────────┴───────────────────────────────────┘
 ```
 
-## ⚙️ 安装和运行
+## 核心功能
 
-### 1. 安装依赖
+### 1. 热门板块推送 📊
+扫描涨幅板块 → AI分析炒作周期 → 推荐进场时机
+
 ```bash
-pip install -r requirements.txt
+python sector_trading_advisor.py
 ```
 
-### 2. 基础版本 (模拟数据)
+**输出示例**：
+```
+🔥 1. AI大模型 +12.25%
+   💡 原因: 概念炒作
+   ⏱️ 周期: 1-3天
+   🎯 建议: 观望
+```
+
+### 2. 多市场情绪分析 🌍
+支持港股、美股、A股、韩股的情绪分析
+
 ```bash
-python main.py 0700.HK                    # 单次分析
-python demo_script.py                     # 完整演示
+python sentiment_hub.py 09880    # 港股-优必选
+python sentiment_hub.py NVDA     # 美股-英伟达
+python sentiment_hub.py 600519   # A股-茅台
+python sentiment_hub.py 삼성전자   # 韩股-三星
 ```
 
-### 3. 增强版本 (真实数据 + AI分析)
+**输出示例**：
+```
+📊 优必选 (09880.HK) 情绪分析
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔥 综合热度: 85/100
+😊 情绪倾向: positive (72%)
+📈 价格: 168.50 HKD (+8.2%)
+
+📱 数据来源:
+├─ 雪球: 127条讨论, 看多62%
+├─ Reddit: 45条提及, bullish
+└─ DC Inside: 23条, 긍정적
+```
+
+### 3. 深度研究 🔬
+AI驱动的公司基本面分析
+
 ```bash
-# 设置Gemini API密钥 (可选，用于AI分析)
-export GEMINI_API_KEY="your_api_key_here"
-
-# 运行增强分析
-python enhanced_main.py 0700.HK
+python gemini_deep_research.py 02513   # 智谱AI
 ```
 
-详细配置请参考 [setup_guide.md](setup_guide.md)
+**分析内容**：
+- 公司基本面
+- 行业趋势
+- 竞争格局
+- 投资建议
 
-## 🧠 核心逻辑
+### 4. 策略助手 🎯
 
-### 技术指标计算
-- **EMA20/EMA50**: 指数移动平均线，判断趋势方向
-- **RSI14**: 相对强弱指数，识别超买超卖
-- **ATR14**: 平均真实波幅，衡量波动性
+```bash
+# 扫描稀缺股
+python my_strategy_helper.py scan
 
-### 入场策略
-1. **上升趋势**: EMA20 > EMA50 且 RSI < 70
-2. **超卖反弹**: RSI < 30（抄底机会）
-3. **ATR缓冲**: 使用ATR确定合理入场价格区间
+# 找补涨机会
+python my_strategy_helper.py laggards
 
-### 风险控制
-- 最大单仓位: 10,000 HKD
-- 每日交易限制: 5笔
-- 价格范围检查: 1.0 - 1000.0 HKD
-- 交易时间限制: 09:30 - 16:00
-- 港股格式验证: 必须以.HK结尾
+# 研究报告分析
+python my_strategy_helper.py research 02382
+```
 
-## 💡 使用示例
+### 5. 研究报告分析 📈
+券商研究报告 + 基本面分析
 
+```bash
+python research_analyzer.py 02382
+```
+
+**分析内容**：
+- 实时行情 (Futu API)
+- 20日VWAP主力成本
+- 券商目标价汇总
+- 投资评级分析
+
+---
+
+## 数据源
+
+### 行情数据
+
+| 数据源 | 用途 | 获取方式 |
+|--------|------|----------|
+| **富途 OpenD** | 实时行情、K线、资金流 | 下载 [Futu OpenD](https://openapi.futunn.com/)，本地运行 `127.0.0.1:11111` |
+| Yahoo Finance | 备用行情数据 | `pip install yfinance`，免费无需注册 |
+
+**富途 OpenD 数据获取代码**：
 ```python
-from hk_trading_bot.modules.indicators import TechnicalIndicators
-from hk_trading_bot.modules.entry_pricing import EntryStrategy
-from hk_trading_bot.modules.execution_paper import PaperTrader
+from futu import OpenQuoteContext, RET_OK
 
-# 计算技术指标
-price_data = {'close': [50, 51, 49, 52, 48]}  # 历史价格
-indicators = TechnicalIndicators.calculate_all_indicators(price_data)
+quote_ctx = OpenQuoteContext(host='127.0.0.1', port=11111)
 
-# 计算入场价格
-strategy = EntryStrategy()
-entry_info = strategy.calculate_entry_price(50.0, indicators)
+# 获取实时行情
+ret, data = quote_ctx.get_market_snapshot(['HK.09880'])
 
-# 执行模拟交易
-trader = PaperTrader()
-result = trader.place_order('0700.HK', 'buy', 100, 50.0)
-```
+# 获取K线
+ret, data = quote_ctx.get_cur_kline('HK.09880', KLType.K_DAY, 20)
 
-## 📊 输出示例
+# 获取资金流
+ret, data = quote_ctx.get_capital_flow(['HK.09880'])
 
-```
-🤖 HK Trading Bot initialized
-💰 Initial cash: 100,000.00 HKD
-
-📊 Analyzing 0700.HK...
-💲 Current price: 72.25 HKD
-
-📈 Technical Indicators:
-   EMA20: 76.35
-   EMA50: 80.78
-   RSI14: 29.27
-   ATR14: 1.57
-
-🎯 Entry Analysis:
-   Signal: LONG
-   Reason: Oversold bounce opportunity (RSI=29.3 < 30)
-   Entry Price: 71.86 HKD
-   Discount: 0.5%
-
-💼 Portfolio Summary:
-   Cash: 100,000.00 HKD
-   Total Value: 100,000.00 HKD
-   P&L: 0.00 HKD (0.0%)
-```
-
-## 🔧 配置说明
-
-### 风险控制配置
-```python
-{
-    'max_position_size': 10000,      # 最大单仓位金额 (HKD)
-    'max_daily_trades': 5,           # 每日最大交易次数
-    'max_portfolio_risk': 0.02,      # 组合最大风险比例
-    'min_price_threshold': 1.0,      # 最低价格阈值
-    'max_price_threshold': 1000.0,   # 最高价格阈值
-}
-```
-
-### 入场策略配置
-```python
-{
-    'atr_multiplier': 0.5,    # ATR倍数
-    'max_discount': 0.02,     # 最大折扣比例
-    'rsi_oversold': 30,       # RSI超卖阈值
-    'rsi_overbought': 70      # RSI超买阈值
-}
-```
-
-## ⚠️ 免责声明
-
-- 本项目仅用于学习和研究目的
-- 所有交易均为模拟，不涉及真实资金
-- 不构成任何投资建议
-- 使用者需自行承担所有风险
-
-## 🎓 交易系统技能
-
-### 📚 港股日赚300元交易系统
-- **位置**: `docs/skills/港股日赚300元交易系统.md`
-- **完整指南**: `docs/交易系统使用指南.md`
-- **技能名**: `hk-stock-daily-profit`
-- **特点**:
-  - 基于Larry Williams、Oliver Velez等大师方法论
-  - 5万本金日赚300元进阶方案
-  - 完整的买卖点判断系统
-  - 11个实战场景测试
-  - 清晰的进阶路径（300→500→1000元/天）
-
-### 🔗 技能+Bot联动
-- **Bot负责**: 扫描市场、实时监控、数据分析
-- **技能负责**: 买卖决策、风险管理、心理纪律
-- **配合使用**: 查看 `docs/交易系统使用指南.md`
-
-### 快速使用
-```bash
-# 在Claude Code中调用
-/hk-stock-daily-profit
-
-# 或查看完整文档
-cat docs/skills/港股日赚300元交易系统.md
+quote_ctx.close()
 ```
 
 ---
 
-## 🚀 扩展计划
+### 社交媒体情绪
 
-- [ ] 支持更多技术指标
-- [ ] 回测功能
-- [ ] Web界面
-- [ ] 实时行情接入
-- [ ] 更复杂的交易策略
-- [x] **交易系统技能整合** ✅
+| 平台 | 市场 | 获取方式 |
+|------|------|----------|
+| **雪球** | 港股/A股 | 移动端API，无需登录 `stock.xueqiu.com/v5/stock/quote.json` |
+| **东方财富股吧** | A股 | 公开API `guba.eastmoney.com` |
+| **Reddit** | 美股 | 公开API `reddit.com/r/wallstreetbets.json` |
+| **DC Inside** | 韩股 | 公开网页爬取 `gall.dcinside.com` |
+| **Naver Finance** | 韩股 | 公开API `finance.naver.com` |
+
+**雪球数据获取代码**：
+```python
+import requests
+
+# 获取股票行情
+url = "https://stock.xueqiu.com/v5/stock/quote.json"
+params = {"symbol": "09880", "extend": "detail"}
+headers = {"User-Agent": "Xueqiu iPhone"}
+resp = requests.get(url, params=params, headers=headers)
+data = resp.json()
+
+# 获取讨论帖子
+url = "https://xueqiu.com/query/v1/symbol/search/status"
+params = {"symbol": "09880", "count": 20}
+```
+
+**Reddit 数据获取代码**：
+```python
+import requests
+
+# 搜索WSB讨论
+url = "https://www.reddit.com/r/wallstreetbets/search.json"
+params = {"q": "NVDA", "sort": "new", "limit": 20}
+headers = {"User-Agent": "Mozilla/5.0"}
+resp = requests.get(url, params=params, headers=headers)
+posts = resp.json()['data']['children']
+```
+
+**DC Inside 数据获取代码**：
+```python
+import requests
+from bs4 import BeautifulSoup
+
+# 获取韩国散户讨论
+url = "https://gall.dcinside.com/mgallery/board/lists"
+params = {"id": "tenbagger", "search_keyword": "테슬라"}
+resp = requests.get(url)
+soup = BeautifulSoup(resp.text, 'html.parser')
+posts = soup.select('.gall_list tr')
+```
+
+---
+
+### 财经资讯
+
+| 来源 | 获取方式 |
+|------|----------|
+| **新浪财经** | 公开API `feed.mix.sina.com.cn/api/roll/get` |
+| **财联社** | 公开网页 `cls.cn` |
+| **富途资讯** | 富途OpenD API `get_stock_basicinfo` |
+
+**新浪财经资讯获取代码**：
+```python
+import requests
+
+url = "https://feed.mix.sina.com.cn/api/roll/get"
+params = {
+    'pageid': '153',
+    'lid': '2509',
+    'num': 50,
+    'page': 1
+}
+resp = requests.get(url, params=params)
+news = resp.json()['result']['data']
+
+for item in news:
+    print(f"{item['intime']} - {item['title']}")
+```
+
+---
+
+### AI分析
+
+| 服务 | 获取方式 | 费用 |
+|------|----------|------|
+| **Gemini 2.5 Flash** | [AI Studio](https://aistudio.google.com/) 申请 API Key | 免费额度充足 |
+| **OpenAI GPT-4** | [OpenAI Platform](https://platform.openai.com/) 申请 API Key | 付费 |
+| **Grok** | [X Developer](https://developer.x.com/) 申请 | 付费 |
+
+**Gemini 分析代码**：
+```python
+import google.generativeai as genai
+
+genai.configure(api_key="YOUR_GEMINI_API_KEY")
+model = genai.GenerativeModel('gemini-2.5-flash')
+
+prompt = f"""
+分析港股 {stock_code} 的投资价值：
+- 公司基本面
+- 行业趋势
+- 风险因素
+- 投资建议
+"""
+response = model.generate_content(prompt)
+print(response.text)
+```
+
+---
+
+### 推送渠道
+
+| 渠道 | 获取方式 |
+|------|----------|
+| **Telegram Bot** | [@BotFather](https://t.me/BotFather) 创建Bot获取Token |
+
+**Telegram 推送代码**：
+```python
+import requests
+
+TELEGRAM_BOT_TOKEN = "your_bot_token"
+TELEGRAM_CHAT_ID = "your_chat_id"
+
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, json=data)
+
+# 获取Chat ID: 给Bot发消息后访问
+# https://api.telegram.org/bot{TOKEN}/getUpdates
+```
+
+---
+
+### 数据源汇总表
+
+| 数据源 | 类型 | 是否免费 | 是否需要注册 | 限制 |
+|--------|------|----------|--------------|------|
+| 富途 OpenD | 行情 | 免费 | 需要 | 本地运行 |
+| Yahoo Finance | 行情 | 免费 | 不需要 | 延迟15分钟 |
+| 雪球 | 情绪 | 免费 | 不需要 | 频率限制 |
+| Reddit | 情绪 | 免费 | 不需要 | 60次/分钟 |
+| DC Inside | 情绪 | 免费 | 不需要 | 无 |
+| 新浪财经 | 资讯 | 免费 | 不需要 | 无 |
+| Gemini | AI | 免费额度 | 需要 | 20次/天(免费) |
+| OpenAI | AI | 付费 | 需要 | 按量计费 |
+| Telegram | 推送 | 免费 | 需要 | 无 |
+
+---
+
+## 板块股票池
+
+### AI大模型
+| 代码 | 名称 | 稀缺性 |
+|------|------|--------|
+| 02513 | 智谱 | 全球仅2只纯大模型股 |
+| 00100 | MiniMax | 全球仅2只纯大模型股 |
+| 09888 | 百度 | AI搜索龙头 |
+
+### 人形机器人
+| 代码 | 名称 | 稀缺性 |
+|------|------|--------|
+| 09880 | 优必选 | 全球首家纯人形机器人IPO |
+| 02432 | 越疆 | 协作机器人龙头 |
+
+### GPU芯片
+| 代码 | 名称 | 稀缺性 |
+|------|------|--------|
+| 06082 | 壁仞科技 | 国产GPU龙头 |
+| 09903 | 天数智芯 | 国产GPU设计 |
+
+### 更多板块
+- 互联网：00700(腾讯)、09988(阿里)、03690(美团)
+- 新能源车：01211(比亚迪)、09868(小鹏)
+- 生物医药：02269(药明)、02675(精锋医疗)
+
+---
+
+## 快速开始
+
+### 1. 环境配置
+
+```bash
+# 克隆项目
+git clone https://github.com/hitome0123/hk-trading-bot.git
+cd hk-trading-bot
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 配置环境变量
+export GEMINI_API_KEY="your_gemini_key"
+export OPENAI_API_KEY="your_openai_key"  # 可选
+```
+
+### 2. 启动富途 OpenD
+
+```bash
+# Mac
+open "/path/to/Futu_OpenD-GUI"
+
+# 等待连接成功
+python test_futu_simple.py
+```
+
+### 3. 运行系统
+
+```bash
+# 热门板块扫描
+python sector_trading_advisor.py
+
+# 情绪分析
+python sentiment_hub.py 09880
+
+# 深度研究
+python gemini_deep_research.py 02513
+```
+
+### 4. 部署云端监控 (可选)
+
+```bash
+# 部署到阿里云
+./deploy/update_cloud_service.sh
+```
+
+---
+
+## 交易策略
+
+### 五条铁律
+1. **只做热门龙头** - 不碰冷门股
+2. **突破放量买入** - 量价配合
+3. **2%止损** - 铁律执行
+4. **达标收工** - 不贪心
+5. **止损停手** - 当日不再交易
+
+### 渐进目标
+| 等级 | 日收益 | 本金要求 |
+|------|--------|----------|
+| Lv.1 | 300元 | 5万 |
+| Lv.2 | 500元 | 8万 |
+| Lv.3 | 800元 | 12万 |
+| Lv.4 | 1000元 | 15万 |
+
+### 主力成本分析
+- **富途"主力"**: 按订单金额分类（特大单>100万, 大单20-100万）
+- **主力成本估算**: 20日VWAP
+- **买入信号**: 主力净流入>500万 + 现价≤20日VWAP
+- **卖出信号**: 现价>VWAP×115% 或 主力连续3天净流出
+
+---
+
+## 项目结构
+
+```
+hk-trading-bot/
+├── sector_trading_advisor.py   # 热门板块推送 (核心)
+├── sentiment_hub.py            # 多市场情绪分析
+├── gemini_deep_research.py     # AI深度研究
+├── my_strategy_helper.py       # 策略助手
+├── research_analyzer.py        # 研究报告分析
+│
+├── deploy/
+│   ├── cloud_sentiment_monitor.py  # 云端情绪监控
+│   └── update_cloud_service.sh     # 部署脚本
+│
+├── n8n_*.py                    # n8n工作流桥接
+├── gemini_analyzer.py          # Gemini AI分析器
+├── grok_sentiment_analyzer.py  # Grok情绪分析
+│
+├── 操作手册.md                  # 完整操作手册
+├── 港股交易完整策略手册_v2.0.md  # 策略手册
+└── 港股稀缺概念股图谱.md         # 稀缺股图谱
+```
+
+---
+
+## Telegram 推送
+
+### 配置
+```python
+TELEGRAM_BOT_TOKEN = "your_bot_token"
+TELEGRAM_CHAT_ID = "your_chat_id"
+```
+
+### 推送内容
+- 📊 **热门板块** - 涨幅板块 + 进场建议
+- 🔔 **情绪告警** - 情绪突变提醒
+- 📈 **盘前提醒** - 今日关注股票
+- 📉 **盘后报告** - 当日复盘
+
+---
+
+## 常用命令
+
+```bash
+# 快捷别名 (添加到 ~/.zshrc)
+alias 研究='python ~/hk-trading-bot/gemini_deep_research.py'
+alias 情绪='python ~/hk-trading-bot/sentiment_hub.py'
+alias 扫描='python ~/hk-trading-bot/my_strategy_helper.py scan'
+alias 补涨='python ~/hk-trading-bot/my_strategy_helper.py laggards'
+
+# 使用方式
+研究 09880
+情绪 NVDA
+扫描
+```
+
+---
+
+## 免责声明
+
+- 本项目仅用于学习和研究目的
+- 不构成任何投资建议
+- 使用者需自行承担所有风险
+- 富途 OpenD 仅用于只读查询，禁止交易操作
+
+---
+
+## License
+
+MIT
