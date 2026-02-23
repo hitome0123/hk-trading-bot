@@ -18,11 +18,11 @@
       "signal_desc": "主力大买+明显低估",
       "main_net": 1.8635166,
       "retail_net": 5.5634454,
-      "current_price": 85.3,
-      "market_value": 25590.0,
-      "pnl": -45.0,
-      "pnl_pct": -0.1755412521942723,
-      "last_update": "2026-02-23 14:44:53"
+      "current_price": 85.1,
+      "market_value": 25530.0,
+      "pnl": -105.0,
+      "pnl_pct": -0.40959625511996317,
+      "last_update": "2026-02-23 16:00:07"
     },
     {
       "code": "HK.00388",
@@ -39,11 +39,11 @@
       "signal_desc": "主力买入+略低估",
       "main_net": 0.994874,
       "retail_net": 0.2128638,
-      "current_price": 418.6,
-      "market_value": 41860.0,
-      "pnl": 100.0,
-      "pnl_pct": 0.23946360153256704,
-      "last_update": "2026-02-23 14:44:53"
+      "current_price": 418.4,
+      "market_value": 41840.0,
+      "pnl": 80.0,
+      "pnl_pct": 0.19157088122604274,
+      "last_update": "2026-02-23 16:00:07"
     },
     {
       "code": "HK.02382",
@@ -60,11 +60,11 @@
       "signal_desc": "主力流入+略低估",
       "main_net": 0.30343145,
       "retail_net": 0.3665421,
-      "current_price": 59.1,
-      "market_value": 29550.0,
-      "pnl": 25.0,
-      "pnl_pct": 0.08467400508044753,
-      "last_update": "2026-02-23 14:44:53"
+      "current_price": 58.75,
+      "market_value": 29375.0,
+      "pnl": -150.0,
+      "pnl_pct": -0.508044030482637,
+      "last_update": "2026-02-23 16:00:07"
     }
   ],
   "history": [
@@ -102,8 +102,8 @@
   "total_invested": 96920.0,
   "position_count": 3,
   "total_cost": 96920.0,
-  "total_market_value": 97000.0,
-  "total_pnl": 80.0,
-  "total_pnl_pct": 0.08254230293025176,
-  "last_track_time": "2026-02-23 14:44:53"
+  "total_market_value": 96745.0,
+  "total_pnl": -175.0,
+  "total_pnl_pct": -0.1805612876599257,
+  "last_track_time": "2026-02-23 16:00:07"
 }

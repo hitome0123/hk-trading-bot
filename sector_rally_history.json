@@ -1,0 +1,31 @@
+[
+  {
+    "time": "2026-02-23 14:59:04",
+    "sectors": {
+      "芯片半导体": {
+        "mention_count": 12,
+        "leader": {
+          "code": "HK.02382",
+          "name": "舜宇光学科技",
+          "change_rate": 0.08474576271186442
+        }
+      },
+      "AI大模型": {
+        "mention_count": 10,
+        "leader": {
+          "code": "HK.02513",
+          "name": "智谱",
+          "change_rate": 0.08598452278589853
+        }
+      },
+      "互联网": {
+        "mention_count": 8,
+        "leader": {
+          "code": "HK.09618",
+          "name": "京东集团-SW",
+          "change_rate": 0.09267840593141798
+        }
+      }
+    }
+  }
+]
