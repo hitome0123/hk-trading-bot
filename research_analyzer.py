@@ -6,10 +6,11 @@ Research Report Analyzer
 
 功能:
 1. 获取券商研究报告 (WebSearch)
-2. 基本面数据分析 (Futu API)
+2. 基本面数据分析 (Futu API + OpenBB)
 3. 目标价汇总
 4. 投资评级汇总
 5. 主力成本分析 (VWAP)
+6. 技术指标分析 (OpenBB)
 """
 
 import os
@@ -24,7 +25,13 @@ try:
     HAS_FUTU = True
 except ImportError:
     HAS_FUTU = False
-    print("⚠️ 未安装futu-api，部分功能不可用")
+
+# OpenBB Client
+try:
+    from openbb_client import OpenBBClient
+    HAS_OPENBB = True
+except ImportError:
+    HAS_OPENBB = False
 
 
 class ResearchAnalyzer:
@@ -35,6 +42,7 @@ class ResearchAnalyzer:
         self.futu_host = futu_host
         self.futu_port = futu_port
         self.quote_ctx = None
+        self.openbb = None
 
         # 连接Futu (如果可用)
         if HAS_FUTU:
@@ -44,6 +52,17 @@ class ResearchAnalyzer:
             except Exception as e:
                 print(f"⚠️ 无法连接Futu OpenD: {e}")
                 self.quote_ctx = None
+
+        # 初始化OpenBB客户端
+        if HAS_OPENBB:
+            try:
+                self.openbb = OpenBBClient()
+                if self.openbb.health_check():
+                    print("✅ 已连接OpenBB API")
+                else:
+                    self.openbb = None
+            except Exception as e:
+                self.openbb = None
 
     def __del__(self):
         """清理资源"""
@@ -146,6 +165,37 @@ class ResearchAnalyzer:
             print(f"⚠️ VWAP计算失败: {e}")
             return None
 
+    def get_openbb_data(self, code: str) -> Dict:
+        """
+        从OpenBB获取补充数据
+
+        Args:
+            code: 股票代码 (如 'HK.02382')
+
+        Returns:
+            OpenBB数据字典
+        """
+        if not self.openbb:
+            return {}
+
+        try:
+            # 获取技术指标
+            technical = self.openbb.get_technical_summary(code)
+
+            # 获取VWAP (如果Futu没有的话)
+            vwap = self.openbb.calculate_vwap(code, days=20)
+
+            # 获取报价 (用于补充数据)
+            quote = self.openbb.get_quote(code)
+
+            return {
+                'technical': technical if 'error' not in technical else {},
+                'vwap': vwap if 'error' not in vwap else {},
+                'quote': quote if 'error' not in quote else {},
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
     def search_research_reports(self, stock_code: str, stock_name: str) -> str:
         """
         搜索券商研究报告
@@ -172,12 +222,13 @@ class ResearchAnalyzer:
 
         return " OR ".join(queries)
 
-    def format_research_summary(self, fundamental: Dict, reports_info: str = "") -> str:
+    def format_research_summary(self, fundamental: Dict, openbb_data: Dict = None, reports_info: str = "") -> str:
         """
         格式化研究报告摘要
 
         Args:
-            fundamental: 基本面数据
+            fundamental: 基本面数据 (Futu)
+            openbb_data: OpenBB补充数据
             reports_info: 研究报告信息 (WebSearch结果)
 
         Returns:
@@ -186,6 +237,7 @@ class ResearchAnalyzer:
         if 'error' in fundamental:
             return f"❌ 错误: {fundamental['error']}"
 
+        openbb_data = openbb_data or {}
         output = []
         output.append("=" * 60)
         output.append(f"📊 研究报告分析 - {fundamental['name']} ({fundamental['code']})")
@@ -200,6 +252,11 @@ class ResearchAnalyzer:
         output.append(f"成交量: {fundamental['volume']:,} 股")
         output.append(f"成交额: {fundamental['turnover']:,.2f} 万港元")
         output.append(f"换手率: {fundamental['turnover_rate']:.2f}%")
+
+        # OpenBB 52周数据
+        quote = openbb_data.get('quote', {})
+        if quote.get('year_high') and quote.get('year_low'):
+            output.append(f"52周范围: {quote['year_low']:.2f} - {quote['year_high']:.2f}")
         output.append("")
 
         # 2. 估值指标
@@ -211,20 +268,68 @@ class ResearchAnalyzer:
         output.append("")
 
         # 3. 主力成本分析
-        if fundamental['vwap_20']:
-            output.append("【主力成本分析】(20日VWAP)")
-            output.append(f"主力成本: {fundamental['vwap_20']:.2f} HKD")
-            output.append(f"当前位置: {fundamental['vs_vwap']:+.2f}% vs 成本线")
+        vwap_20 = fundamental.get('vwap_20')
+        vs_vwap = fundamental.get('vs_vwap')
 
-            if fundamental['vs_vwap'] < -3:
-                output.append("💡 策略建议: 价格低于成本线3%+，可能是主力洗盘或散户恐慌，关注主力资金流向")
-            elif fundamental['vs_vwap'] > 15:
+        # 如果Futu没有VWAP，使用OpenBB的
+        if not vwap_20 and openbb_data.get('vwap', {}).get('vwap'):
+            vwap_20 = openbb_data['vwap']['vwap']
+            vs_vwap = openbb_data['vwap'].get('vs_vwap_pct', 0)
+
+        if vwap_20:
+            output.append("【主力成本分析】(20日VWAP)")
+            output.append(f"主力成本: {vwap_20:.2f} HKD")
+            output.append(f"当前位置: {vs_vwap:+.2f}% vs 成本线")
+
+            if vs_vwap < -3:
+                output.append("💡 策略建议: 价格低于成本线3%+，可能是主力洗盘或散户恐慌")
+            elif vs_vwap > 15:
                 output.append("⚠️ 策略建议: 价格高于成本线15%+，警惕主力获利出货")
+            elif vs_vwap > 5:
+                output.append("📊 策略建议: 高于成本线5%+，观察主力动向")
             else:
-                output.append("📊 策略建议: 价格在成本线附近波动，观察主力动向")
+                output.append("✅ 策略建议: 接近成本线，可考虑建仓")
             output.append("")
 
-        # 4. 研究报告 (需要WebSearch结果)
+        # 4. 技术指标 (OpenBB)
+        technical = openbb_data.get('technical', {})
+        if technical and 'error' not in technical:
+            output.append("【技术指标】(OpenBB)")
+
+            # 均线
+            ma_info = []
+            if technical.get('ma_20'):
+                ma_info.append(f"MA20: {technical['ma_20']:.2f}")
+            if technical.get('ma_50'):
+                ma_info.append(f"MA50: {technical['ma_50']:.2f}")
+            if technical.get('ma_200'):
+                ma_info.append(f"MA200: {technical['ma_200']:.2f}")
+            if ma_info:
+                output.append(" | ".join(ma_info))
+
+            # RSI
+            if technical.get('rsi_14'):
+                rsi = technical['rsi_14']
+                if rsi > 70:
+                    rsi_status = "⚠️ 超买"
+                elif rsi < 30:
+                    rsi_status = "💡 超卖"
+                else:
+                    rsi_status = "正常"
+                output.append(f"RSI(14): {rsi:.1f} {rsi_status}")
+
+            # 趋势
+            if technical.get('trend'):
+                trend_map = {'bullish': '🟢 看涨', 'bearish': '🔴 看跌', 'neutral': '⚪ 震荡'}
+                output.append(f"趋势判断: {trend_map.get(technical['trend'], technical['trend'])}")
+
+            # 支撑阻力
+            if technical.get('support') and technical.get('resistance'):
+                output.append(f"支撑位: {technical['support']:.2f} | 阻力位: {technical['resistance']:.2f}")
+
+            output.append("")
+
+        # 5. 研究报告 (需要WebSearch结果)
         if reports_info:
             output.append("【券商研究报告】")
             output.append(reports_info)
@@ -236,8 +341,11 @@ class ResearchAnalyzer:
             output.append(f"   {search_query}")
             output.append("")
 
-        # 5. 数据时间
-        output.append(f"📅 数据时间: {fundamental['update_time']}")
+        # 6. 数据来源
+        sources = ["Futu OpenD"]
+        if openbb_data:
+            sources.append("OpenBB")
+        output.append(f"📅 数据时间: {fundamental['update_time']} | 来源: {', '.join(sources)}")
         output.append("=" * 60)
 
         return "\n".join(output)
@@ -257,14 +365,17 @@ class ResearchAnalyzer:
         if not code.startswith('HK.'):
             code = f'HK.{code}'
 
-        # 获取基本面数据
+        # 获取基本面数据 (Futu)
         fundamental = self.get_fundamental_data(code)
 
         if 'error' in fundamental:
             return f"❌ 分析失败: {fundamental['error']}"
 
+        # 获取OpenBB补充数据
+        openbb_data = self.get_openbb_data(code)
+
         # 生成报告
-        report = self.format_research_summary(fundamental)
+        report = self.format_research_summary(fundamental, openbb_data)
 
         if include_search_hint:
             report += "\n\n💡 提示: 在Claude Code中使用WebSearch工具可自动获取券商研究报告"

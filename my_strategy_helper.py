@@ -921,6 +921,134 @@ if __name__ == "__main__":
             tracker = MuskTracker()
             print(tracker.format_tracker_report())
 
+        elif cmd == 'openbb' and len(sys.argv) > 2:
+            # OpenBB 数据分析
+            from openbb_client import OpenBBClient
+            client = OpenBBClient()
+            subcmd = sys.argv[2]
+
+            if subcmd == 'check':
+                if client.health_check():
+                    print("✅ OpenBB API 正常运行")
+                else:
+                    print("❌ OpenBB API 不可用")
+                    print("   启动: cd ~/OpenBB-Alice && source .venv/bin/activate && openbb-api")
+
+            elif subcmd == 'quote' and len(sys.argv) > 3:
+                result = client.get_quote(sys.argv[3])
+                if "error" not in result:
+                    print(f"\n📈 {result['name']} ({result['symbol']})")
+                    print(f"   现价: {result['last_price']} {result['currency']}")
+                    print(f"   涨跌: {result['change']:+.2f} ({result['change_pct']:+.2f}%)")
+                    print(f"   成交量: {result['volume']:,}")
+                    print(f"   52周: {result['year_low']} - {result['year_high']}")
+                else:
+                    print(f"❌ {result['error']}")
+
+            elif subcmd == 'vwap' and len(sys.argv) > 3:
+                days = int(sys.argv[4]) if len(sys.argv) > 4 else 20
+                result = client.calculate_vwap(sys.argv[3], days)
+                if "error" not in result:
+                    print(f"\n📊 VWAP 分析 ({days}日)")
+                    print(f"   主力成本: {result['vwap']}")
+                    print(f"   当前价格: {result['current']}")
+                    print(f"   vs 成本线: {result['vs_vwap_pct']:+.2f}%")
+                    print(f"   {result['signal']}")
+                else:
+                    print(f"❌ {result['error']}")
+
+            elif subcmd == 'analyze' and len(sys.argv) > 3:
+                result = client.analyze_stock(sys.argv[3])
+                if "error" not in result:
+                    print(f"\n{'='*50}")
+                    print(f"📊 OpenBB分析: {result['name']} ({result['symbol']})")
+                    print('='*50)
+                    q = result['quote']
+                    print(f"\n【行情】现价: {q['price']} ({q['change_pct']:+.2f}%)")
+                    v = result['vwap']
+                    print(f"【主力】VWAP: {v['value']} | vs成本: {v['vs_pct']:+.2f}%")
+                    print(f"       {v['signal']}")
+                    t = result['technical']
+                    print(f"【技术】MA50: {t['ma_50']} | RSI: {t['rsi']} | 趋势: {t['trend']}")
+                else:
+                    print(f"❌ {result['error']}")
+
+            else:
+                print("用法: python my_strategy_helper.py openbb <命令> [参数]")
+                print("  openbb check              # 检查API状态")
+                print("  openbb quote 9988.HK      # 获取报价")
+                print("  openbb vwap 9988.HK [天数] # VWAP分析")
+                print("  openbb analyze 9988.HK    # 综合分析")
+
+        elif cmd == 'alice' and len(sys.argv) > 2:
+            # OpenAlice AI Agent
+            from openalice_client import OpenAliceClient
+            client = OpenAliceClient()
+            subcmd = sys.argv[2]
+
+            if subcmd == 'check':
+                if client.health_check():
+                    print("✅ OpenAlice 正常运行")
+                else:
+                    print("❌ OpenAlice 不可用")
+                    print("   启动: cd ~/OpenAlice && pnpm dev")
+
+            elif subcmd == 'chat':
+                message = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else "你好"
+                print(f"🤖 发送: {message}\n")
+                result = client.chat(message)
+                print(f"📝 回复:\n{result.get('response', result)}")
+
+            elif subcmd == 'analyze' and len(sys.argv) > 3:
+                print(f"🔍 AI分析 {sys.argv[3]}...\n")
+                result = client.analyze_stock(sys.argv[3])
+                print(result)
+
+            elif subcmd == 'brief':
+                print("📰 获取今日早报...\n")
+                result = client.morning_brief()
+                print(result)
+
+            elif subcmd == 'sector' and len(sys.argv) > 3:
+                print(f"📊 扫描 {sys.argv[3]} 板块...\n")
+                result = client.sector_scan(sys.argv[3])
+                print(result)
+
+            else:
+                print("用法: python my_strategy_helper.py alice <命令> [参数]")
+                print("  alice check               # 检查AI状态")
+                print("  alice chat <消息>          # 与AI对话")
+                print("  alice analyze 9988.HK     # AI分析股票")
+                print("  alice brief               # 今日早报")
+                print("  alice sector AI芯片        # 板块扫描")
+
+        elif cmd == 'reports' and len(sys.argv) > 2:
+            # 研报聚合
+            from research_aggregator import ResearchAggregator
+            aggregator = ResearchAggregator()
+            report = aggregator.analyze(sys.argv[2])
+            print(report)
+
+        elif cmd == 'calendar':
+            # 宏观经济日历
+            from economic_calendar import EconomicCalendar
+            calendar = EconomicCalendar()
+            subcmd = sys.argv[2] if len(sys.argv) > 2 else 'today'
+            if subcmd == 'today':
+                print(calendar.get_upcoming_key_events())
+            elif subcmd == 'week':
+                print(calendar.get_upcoming_key_events())
+            elif subcmd == 'us':
+                print("🇺🇸 美国经济数据日历\n")
+                print("使用 WebSearch 搜索:")
+                print("  \"US economic calendar this week high impact\"")
+            elif subcmd == 'cn':
+                print("🇨🇳 中国经济数据日历\n")
+                print("使用 WebSearch 搜索:")
+                print("  \"China economic data release schedule\"")
+            else:
+                print(calendar.get_upcoming_key_events())
+
         else:
             print("""
 用法:
@@ -939,9 +1067,30 @@ if __name__ == "__main__":
   python my_strategy_helper.py sentiment all     # 全球综合分析
   python my_strategy_helper.py musk       # 马斯克专用追踪器
 
-新功能 🆕:
+研报聚合 & 宏观日历 🆕:
+  python my_strategy_helper.py reports 09988     # 券商研报聚合 (阿里)
+  python my_strategy_helper.py reports AAPL      # 美股研报
+  python my_strategy_helper.py calendar          # 今日经济日历
+  python my_strategy_helper.py calendar week     # 本周经济日历
+  python my_strategy_helper.py calendar us       # 美国数据日历
+  python my_strategy_helper.py calendar cn       # 中国数据日历
+
+社区情绪:
   - sentiment reddit: 实时获取WallStreetBets热门股票 (ApeWisdom API)
   - 无需配置，直接使用！
+
+OpenBB 数据源 (开源Bloomberg):
+  python my_strategy_helper.py openbb check         # 检查API
+  python my_strategy_helper.py openbb quote 9988.HK # 获取报价
+  python my_strategy_helper.py openbb vwap 9988.HK  # VWAP分析
+  python my_strategy_helper.py openbb analyze 9988.HK # 综合分析
+
+OpenAlice AI Agent:
+  python my_strategy_helper.py alice check          # 检查AI
+  python my_strategy_helper.py alice chat 分析阿里巴巴  # 与AI对话
+  python my_strategy_helper.py alice analyze 9988.HK # AI分析
+  python my_strategy_helper.py alice brief          # 今日早报
+  python my_strategy_helper.py alice sector AI芯片   # 板块扫描
             """)
     else:
         main()
